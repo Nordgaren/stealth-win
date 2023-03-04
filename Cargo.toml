@@ -1,0 +1,17 @@
+[package]
+name = "reflective-dll"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dyload"
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[build-dependencies]
+winresource = "0.1.15"
+rand = "0.8.5"
+windows-sys = {version="0.45.0", features=["Win32", "Win32_Security", "Win32_Security_Cryptography", "Win32_Foundation"]}

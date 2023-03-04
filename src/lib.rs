@@ -1,0 +1,65 @@
+#[allow(non_snake_case)]
+extern crate core;
+
+mod loader;
+mod crypto_util;
+mod util;
+mod winapi;
+mod winternals;
+mod consts;
+
+use winternals::*;
+use crate::consts::{ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN, ADVAPI32_DLL_POS, USER32_DLL_LEN, USER32_DLL_POS};
+use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
+use crate::winapi::*;
+
+static mut hAppInstance: usize = 0;
+
+#[no_mangle] // call it "DllMain" in the compiled DLL
+pub extern "stdcall" fn DllMain(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32 {
+
+    match dwReason {
+        // match for what reason it's calling us
+        DLL_PROCESS_ATTACH => {
+            unsafe {
+                hAppInstance = hinstDLL;
+                load_libraries();
+                MessageBoxA(0, "Hello from DllMain!\0".as_ptr(), "Reflective Dll Injection\0".as_ptr(), MB_OK);
+            }
+            return true as i32;
+        }
+        DLL_QUERY_HMODULE => {
+            unsafe  {
+                if lpReserved as usize != 0 {
+                    *lpReserved =  hAppInstance;
+                }
+            }
+            return true as i32;
+        }
+        _ => true as i32,
+    }
+}
+
+fn load_libraries() {
+    unsafe {
+        let mut advapi = get_xor_encrypted_string(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN);
+        advapi.push(0);
+        LoadLibraryA(advapi.as_ptr());
+
+        let mut  user32 = get_aes_encrypted_resource_bytes(USER32_DLL_POS, USER32_DLL_LEN);
+        user32.push(0);
+        LoadLibraryA(user32.as_ptr());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::loader::reflective_load;
+
+    #[test]
+    fn it_works() {
+        unsafe {
+            reflective_load();
+        }
+    }
+}
