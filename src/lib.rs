@@ -17,7 +17,6 @@ static mut hAppInstance: usize = 0;
 
 #[no_mangle] // call it "DllMain" in the compiled DLL
 pub extern "stdcall" fn DllMain(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32 {
-
     match dwReason {
         // match for what reason it's calling us
         DLL_PROCESS_ATTACH => {
@@ -54,12 +53,13 @@ fn load_libraries() {
 
 #[cfg(test)]
 mod tests {
-    use crate::loader::reflective_load;
+    use std::ptr::addr_of_mut;
+    use crate::loader::ReflectiveLoader;
 
     #[test]
     fn it_works() {
         unsafe {
-            reflective_load();
+            ReflectiveLoader(0 as *mut usize);
         }
     }
 }

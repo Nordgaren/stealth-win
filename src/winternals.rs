@@ -1,10 +1,12 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
+pub type DllMain = extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
+
 //KERNEL32.DLL
 pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type GetLastError = unsafe extern "system" fn() -> u32;
-pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: &[u8]) -> usize;
+pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FindResourceA =
 unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
@@ -19,8 +21,16 @@ unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type OpenProcess =
 unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+pub type NtFlushInstructionCache =
+unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 pub type VirtualAllocEx = unsafe extern "system" fn(
     hProcess: usize,
+    lpAddress: usize,
+    dwSize: usize,
+    flAllocationType: u32,
+    flProtect: u32,
+) -> usize;
+pub type VirtualAlloc = unsafe extern "system" fn(
     lpAddress: usize,
     dwSize: usize,
     flAllocationType: u32,
@@ -88,7 +98,6 @@ pub const MB_DEFAULT_DESKTOP_ONLY: u32 = 0x00020000;
 pub const MB_TOPMOST: u32 = 0x00040000;
 pub const MB_RIGHT: u32 = 0x00080000;
 pub const MB_RTLREADING: u32 = 0x00100000;
-
 
 //advapi32.dll
 pub type CryptAcquireContextW = unsafe extern "system" fn(
@@ -223,6 +232,18 @@ pub struct LDR_DATA_TABLE_ENTRY {
 }
 
 #[repr(C)]
+pub struct TRUNC_LDR_DATA_TABLE_ENTRY {
+    //pub InLoadOrderLinks: LIST_ENTRY, // removed to start from InMemoryOrderLinks without recalculating offset.
+    pub InMemoryOrderLinks: LIST_ENTRY,
+    pub InInitializationOrderLinks: LIST_ENTRY,
+    pub DllBase: usize,
+    pub EntryPoint: usize,
+    pub SizeOfImage: usize,
+    pub FullDllName: UNICODE_STRING,
+    pub BaseDllName: UNICODE_STRING,
+}
+
+#[repr(C)]
 pub struct LIST_ENTRY {
     pub Flink: *mut LIST_ENTRY,
     pub Blink: *mut LIST_ENTRY,
@@ -288,7 +309,9 @@ pub struct IMAGE_OPTIONAL_HEADER {
     pub SizeOfUninitializedData: u32,
     pub AddressOfEntryPoint: u32,
     pub BaseOfCode: u32,
-    pub ImageBase: u64,
+    #[cfg(target_pointer_width = "32")]
+    pub BaseOfData: u32,
+    pub ImageBase: usize,
     pub SectionAlignment: u32,
     pub FileAlignment: u32,
     pub MajorOperatingSystemVersion: u16,
@@ -330,6 +353,34 @@ pub struct IMAGE_SECTION_HEADER {
 pub union IMAGE_SECTION_HEADER_0 {
     pub PhysicalAddress: u32,
     pub VirtualSize: u32,
+}
+
+#[repr(C)]
+pub struct IMAGE_IMPORT_DESCRIPTOR {
+    pub OriginalFirstThunk: u32,
+    // 0 if not bound,
+    // -1 if bound, and real date\time stamp
+    //     in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND)
+    // O.W. date/time stamp of DLL bound to (Old BIND)
+    pub TimeDateStamp: u32,
+    // -1 if no forwarders
+    pub ForwarderChain: u32,
+    pub Name: u32,
+    // RVA to IAT (if bound this IAT has actual addresses)
+    pub FirstThunk: u32,
+}
+
+#[repr(C)]
+pub struct IMAGE_BASE_RELOCATION {
+    pub VirtualAddress: u32,
+    pub SizeOfBlock: u32,
+//  WORD    TypeOffset[1];
+}
+
+#[repr(C)]
+pub struct IMAGE_RELOC
+{
+    pub bitfield: u16,
 }
 
 #[repr(C)]
@@ -447,3 +498,27 @@ pub const DLL_PROCESS_ATTACH: u32 = 1;
 pub const DLL_THREAD_ATTACH: u32 = 2;
 pub const DLL_THREAD_DETACH: u32 = 3;
 pub const DLL_PROCESS_DETACH: u32 = 0;
+pub const DLL_QUERY_HMODULE: u32 = 6;
+
+pub const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
+pub const IMAGE_REL_BASED_HIGH: u16 = 1;
+pub const IMAGE_REL_BASED_LOW: u16 = 2;
+pub const IMAGE_REL_BASED_HIGHLOW: u16 = 3;
+pub const IMAGE_REL_BASED_HIGHADJ: u16 = 4;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_5: u16 = 5;
+pub const IMAGE_REL_BASED_RESERVED: u16 = 6;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_7: u16 = 7;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_8: u16 = 8;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_9: u16 = 9;
+pub const IMAGE_REL_BASED_DIR64: u16 = 10;
+
+#[cfg(all(target_pointer_width = "64"))]
+pub const IMAGE_ORDINAL_FLAG: usize = 0x8000000000000000;
+#[cfg(all(target_pointer_width = "32"))]
+pub const IMAGE_ORDINAL_FLAG: usize = 0x80000000;
+
+#[repr(C)]
+pub struct IMAGE_IMPORT_BY_NAME {
+    pub Hint: u16,
+    pub Name: u8,
+}

@@ -26,7 +26,7 @@ pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
             panic!();
         }
 
-        let key = get_resource_bytes(AES_KEY_POS, AES_KEY_LEN);
+        let key = get_resource_bytes(RESOURCE_ID as u32, AES_KEY_POS, AES_KEY_LEN);
         if !CryptHashData(hHash, key.as_ptr(), key.len() as u32, 0) {
             panic!();
         }
@@ -36,12 +36,12 @@ pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
             panic!();
         }
 
-        let iv = get_resource_bytes(AES_IV_POS, AES_IV_LEN);
+        let iv = get_resource_bytes(RESOURCE_ID as u32, AES_IV_POS, AES_IV_LEN);
         if !CryptSetKeyParam(hKey, KP_IV, iv.as_ptr(), 0) {
             panic!();
         }
 
-        let mut resource = get_resource_bytes(offset, len);
+        let mut resource = get_resource_bytes(RESOURCE_ID as u32, offset, len);
         let mut len = resource.len() as u32;
         if !CryptDecrypt(hKey, 0, 0, 0, resource.as_mut_ptr(), addr_of_mut!(len)) {
             panic!();
@@ -60,8 +60,8 @@ pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
 }
 
 pub fn get_xor_encrypted_string(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
-    let key = get_resource_bytes(key_offset, len);
-    let mut buff = get_resource_bytes(offset, len);
+    let key = get_resource_bytes(RESOURCE_ID as u32, key_offset, len);
+    let mut buff = get_resource_bytes(RESOURCE_ID as u32, offset, len);
 
     for i in 0..len {
         buff[i] ^= key[i];

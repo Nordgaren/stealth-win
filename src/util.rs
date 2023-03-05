@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use std::fs;
 use crate::consts::*;
 use crate::winapi::*;
 use crate::winternals::*;
@@ -16,50 +17,58 @@ pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
     len
 }
 
-pub fn get_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
-    let mut resource = unsafe { get_resource() };
+pub fn get_resource_bytes(resource_id: u32 ,offset: usize, len: usize) -> Vec<u8> {
+    let mut resource = unsafe { get_resource(resource_id) };
     let end = offset + len;
 
     resource[offset..end].to_vec()
 }
 
-unsafe fn get_resource() -> Vec<u8> {
-    let pBaseAddr = get_dll_module_handle();
+pub fn get_unmapped_resource_bytes(resource_id: u32 ,offset: usize, len: usize) -> Vec<u8> {
+    let mut resource = unsafe { get_unmapped_resource(resource_id) };
+    let end = offset + len;
 
-    let pOptionalHdr = get_image_nt_headers(pBaseAddr);
-    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE];
-
-    //level 1: Resource directory
-    let pResourceDirAddr =
-        (pBaseAddr + pResourceDataDir.VirtualAddress as usize) as *const RESOURCE_DIRECTORY_TABLE;
-
-    let pResourceDataEntry = get_resource_data_entry(pResourceDirAddr);
-    let pData = pBaseAddr + (*pResourceDataEntry).DataRVA as usize;
-    std::slice::from_raw_parts(pData as *const u8, (*pResourceDataEntry).DataSize as usize).to_vec()
+    resource[offset..end].to_vec()
 }
 
-unsafe fn get_unmapped_resource() -> Vec<u8> {
-    let pBaseAddr = get_dll_module_handle();
+unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
+    let pBaseAddr = get_dll_base();
 
-    let pOptionalHdr = get_image_nt_headers(pBaseAddr);
-    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE];
-
-    //level 1: Resource directory
-    let pResourceDirAddr =
-        (pBaseAddr + pResourceDataDir.VirtualAddress as usize) as *const RESOURCE_DIRECTORY_TABLE;
-
-    let pResourceDataEntry = get_resource_data_entry(pResourceDirAddr);
-    let pData = pBaseAddr + (*pResourceDataEntry).DataRVA as usize;
-    std::slice::from_raw_parts(pData as *const u8, (*pResourceDataEntry).DataSize as usize).to_vec()
-}
-
-unsafe fn get_image_nt_headers(pBaseAddr: usize) -> &'static IMAGE_OPTIONAL_HEADER {
     let pDosHdr = pBaseAddr as *const IMAGE_DOS_HEADER;
     let pNTHdr = (pBaseAddr + (*pDosHdr).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
-    &(*pNTHdr).OptionalHeader
+    let pOptionalHdr = &(*pNTHdr).OptionalHeader;
+    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE];
+
+    let pResourceDirAddr =
+        (pBaseAddr + pResourceDataDir.VirtualAddress as usize) as *const RESOURCE_DIRECTORY_TABLE;
+
+    let pResourceDataEntry = get_resource_data_entry(pResourceDirAddr, resource_id);
+    let pData = pBaseAddr + (*pResourceDataEntry).DataRVA as usize;
+    std::slice::from_raw_parts(pData as *const u8, (*pResourceDataEntry).DataSize as usize)
 }
 
-unsafe fn get_resource_data_entry(pResourceDirAddr: *const RESOURCE_DIRECTORY_TABLE) -> *const RESOURCE_DATA_ENTRY {
+unsafe fn get_unmapped_resource(resource_id: u32) ->&'static [u8]  {
+    let pBaseAddr = get_dll_base();
+    let pDosHdr = pBaseAddr as *const IMAGE_DOS_HEADER;
+    let pNTHdrs = (pBaseAddr + (*pDosHdr).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
+    let pOptionalHdr = &(*pNTHdrs).OptionalHeader;
+    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE];
+
+    let pResourceDirAddrFOA = rva_to_foa(pNTHdrs, pResourceDataDir.VirtualAddress);
+    let pResourceDirAddr =
+        (pBaseAddr + pResourceDirAddrFOA as usize) as *const RESOURCE_DIRECTORY_TABLE;
+
+    let pResourceDataEntry = get_resource_data_entry(pResourceDirAddr, resource_id);
+    let pDataFOA = rva_to_foa(pNTHdrs, (*pResourceDataEntry).DataRVA);
+    let pData = pBaseAddr + pDataFOA as usize;
+    std::slice::from_raw_parts(pData as *const u8, (*pResourceDataEntry).DataSize as usize)
+}
+
+unsafe fn get_resource_data_entry(
+    pResourceDirAddr: *const RESOURCE_DIRECTORY_TABLE,
+    resource_id: u32
+) -> *const RESOURCE_DATA_ENTRY {
+    //level 1: Resource type directory
     let pResourceEntries = pResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
     let mut offset = get_id_entry_offset(pResourceDirAddr, pResourceEntries, RT_RCDATA as u32);
     offset &= 0x7FFFFFFF;
@@ -69,11 +78,10 @@ unsafe fn get_resource_data_entry(pResourceDirAddr: *const RESOURCE_DIRECTORY_TA
         (pResourceDirAddr as usize + offset as usize) as *const RESOURCE_DIRECTORY_TABLE;
     let pDataResourceEntries =
         pDataResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-
     let mut offset = get_id_entry_offset(
         pDataResourceDirAddr,
         pDataResourceEntries,
-        RESOURCE_ID as u32,
+        resource_id,
     );
     offset &= 0x7FFFFFFF;
 
@@ -85,14 +93,13 @@ unsafe fn get_resource_data_entry(pResourceDirAddr: *const RESOURCE_DIRECTORY_TA
     let pLangResourceEntry = pLangResourceEntries as *const IMAGE_RESOURCE_DIRECTORY_ENTRY;
     let offset = (*pLangResourceEntry).OffsetToData;
 
-    //resource data entry
     (pResourceDirAddr as usize + offset as usize) as *const RESOURCE_DATA_ENTRY
 }
 
 unsafe fn get_id_entry_offset(
     pResourceDirAddr: *const RESOURCE_DIRECTORY_TABLE,
     pResourceEntries: usize,
-    target_dir: u32,
+    id: u32,
 ) -> u32 {
     for i in (*pResourceDirAddr).NumberOfNameEntries
         ..(*pResourceDirAddr).NumberOfNameEntries + (*pResourceDirAddr).NumberOfIDEntries
@@ -100,7 +107,7 @@ unsafe fn get_id_entry_offset(
         let pResourceEntry = (pResourceEntries
             + i as usize * size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>())
             as *const IMAGE_RESOURCE_DIRECTORY_ENTRY;
-        if (*pResourceEntry).Name == target_dir {
+        if (*pResourceEntry).Name == id {
             return (*pResourceEntry).OffsetToData;
         }
     }
@@ -108,10 +115,10 @@ unsafe fn get_id_entry_offset(
     0
 }
 
-pub unsafe fn get_dll_module_handle() -> usize {
-    let mut uiLibraryAddress = get_dll_module_handle as usize;
+pub unsafe fn get_dll_base() -> usize {
+    let mut uiLibraryAddress = get_dll_base as usize;
     loop {
-        uiLibraryAddress -= 8;
+        uiLibraryAddress -= 0x10; //functions always end on 16 byte aligned address, relative to the beginning fo the file.
 
         let pos = uiLibraryAddress as *const u16;
         if IMAGE_DOS_SIGNATURE == *pos {
@@ -121,4 +128,18 @@ pub unsafe fn get_dll_module_handle() -> usize {
             }
         }
     }
+}
+
+unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, ulRVA: u32) -> u32 {
+    let pSectionHeaders = (pNtHeaders as usize + size_of::<IMAGE_NT_HEADERS>()) as *const IMAGE_SECTION_HEADER;
+    let sectionHeaders = std::slice::from_raw_parts(pSectionHeaders, (*pNtHeaders).FileHeader.NumberOfSections as usize);
+
+    for i in 0..(*pNtHeaders).FileHeader.NumberOfSections as usize {
+        if (ulRVA >= sectionHeaders[i].VirtualAddress) && (ulRVA <= sectionHeaders[i].VirtualAddress + sectionHeaders[i].SizeOfRawData)
+        {
+            return sectionHeaders[i].PointerToRawData + (ulRVA - sectionHeaders[i].VirtualAddress);
+        }
+    }
+
+    return 0;
 }
