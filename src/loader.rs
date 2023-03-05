@@ -398,13 +398,13 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     fnNtFlushInstructionCache(usize::MAX, 0, 0);
 
     // pDllMain = the VA of our newly loaded DLL/EXE's entry point
-    let pDllMainPtr = pBaseAddress + (*pNtHeaders).OptionalHeader.AddressOfEntryPoint as usize;
-    let pDllMain: DllMain = mem::transmute(pDllMainPtr);
+    let pDllMainAddr = pBaseAddress + (*pNtHeaders).OptionalHeader.AddressOfEntryPoint as usize;
+    let pDllMain: DllMain = mem::transmute(pDllMainAddr);
 
     pDllMain(pBaseAddress, DLL_PROCESS_ATTACH, lpParameter);
 
     // STEP 7: return our new entry point address so whatever called us can call DllMain() if needed.
-    return pDllMainPtr;
+    return pDllMainAddr;
 }
 
 #[inline(always)]
