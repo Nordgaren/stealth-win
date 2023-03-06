@@ -22,15 +22,20 @@ const HASH_KEY: u32 = 13;
 
 #[no_mangle]
 pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
-    // STEP 0: calculate our images current base address. I made it a function to be used elsewhere in the self-loading dll, like the final payload.
+    // STEP 0: calculate our images current base address.
+    // I made it a function to be used elsewhere in the self-loading dll, like the final payload.
+
+    let pLibraryAddress = get_dll_base();
+
+    // if debugging from library tests, use a copy of the file loaded into memory, as the dll base.
     // let dll_file = fs::read(
     //     r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
     // ).unwrap();
     // let pLibraryAddress = dll_file.as_ptr() as usize;
-    let pLibraryAddress = get_dll_base();
+
 
     // STEP 1: process the kernels exports for the functions our loader needs...
-    // get the Process Enviroment Block
+    // get the Process Environment Block
     let peb = get_peb();
 
     let pLdr = (*peb).Ldr;

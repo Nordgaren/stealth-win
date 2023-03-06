@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use std::arch::asm;
 use std::fs;
 use crate::consts::*;
 use crate::winapi::*;
@@ -17,14 +18,14 @@ pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
     len
 }
 
-pub fn get_resource_bytes(resource_id: u32 ,offset: usize, len: usize) -> Vec<u8> {
+pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
     let mut resource = unsafe { get_resource(resource_id) };
     let end = offset + len;
 
     resource[offset..end].to_vec()
 }
 
-pub fn get_unmapped_resource_bytes(resource_id: u32 ,offset: usize, len: usize) -> Vec<u8> {
+pub fn get_unmapped_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
     let mut resource = unsafe { get_unmapped_resource(resource_id) };
     let end = offset + len;
 
@@ -47,7 +48,7 @@ unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
     std::slice::from_raw_parts(pData as *const u8, (*pResourceDataEntry).DataSize as usize)
 }
 
-unsafe fn get_unmapped_resource(resource_id: u32) ->&'static [u8]  {
+unsafe fn get_unmapped_resource(resource_id: u32) -> &'static [u8] {
     let pBaseAddr = get_dll_base();
     let pDosHdr = pBaseAddr as *const IMAGE_DOS_HEADER;
     let pNTHdrs = (pBaseAddr + (*pDosHdr).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
@@ -66,7 +67,7 @@ unsafe fn get_unmapped_resource(resource_id: u32) ->&'static [u8]  {
 
 unsafe fn get_resource_data_entry(
     pResourceDirAddr: *const RESOURCE_DIRECTORY_TABLE,
-    resource_id: u32
+    resource_id: u32,
 ) -> *const RESOURCE_DATA_ENTRY {
     //level 1: Resource type directory
     let pResourceEntries = pResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
@@ -115,24 +116,61 @@ unsafe fn get_id_entry_offset(
     0
 }
 
-pub unsafe fn get_dll_base() -> usize {
-    let mut uiLibraryAddress = get_dll_base as usize;
-    loop {
-        uiLibraryAddress -= 0x10; //functions always end on 16 byte aligned address, relative to the beginning fo the file.
+const ALIGN_16: usize = usize::MAX - 0xF;
 
-        let pos = uiLibraryAddress as *const u16;
+pub unsafe fn get_dll_base() -> usize {
+
+    // functions always end on 16 byte aligned address, relative to the beginning of the file.
+    let mut pLibraryAddress = get_return() & ALIGN_16;
+
+    loop {
+
+        // for some reason, 16 byte alignment is unstable for this function, in x86, so use sizeof::<usize>() * 2
+        pLibraryAddress -= (size_of::<usize>() * 2);
+
+        let pos = pLibraryAddress as *const u16;
         if IMAGE_DOS_SIGNATURE == *pos {
-            let header = pos as *const IMAGE_DOS_HEADER;
-            if (*header).e_lfanew < 0x400 {
-                return uiLibraryAddress;
+            let pDosHeader = pos as *const IMAGE_DOS_HEADER;
+            // some x64 dll's can trigger a bogus signature (IMAGE_DOS_SIGNATURE == 'POP r10'),
+            // we sanity check the e_lfanew with an upper threshold value of 1024 to avoid problems.
+            if (*pDosHeader).e_lfanew < 0x400 {
+                // break if we have found a valid MZ/PE header
+                let pNtHeaders = (pLibraryAddress + (*pDosHeader).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
+                if (*pNtHeaders).Signature == IMAGE_NT_SIGNATURE {
+                    return pLibraryAddress;
+                }
             }
         }
     }
 }
 
+pub unsafe fn get_return() -> usize {
+    let mut ret_addr = 0usize;
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        asm!(
+        "lea {ret_addr}, [rip]",
+        ret_addr = out(reg) ret_addr,
+        );
+    } else if cfg!(all(windows, target_arch = "x86")) {
+        asm!(
+        "mov {ret_addr}, [esp + 4]",
+        ret_addr = out(reg) ret_addr,
+        );
+    } else if cfg!(all(windows, target_arch = "aarch64")) {
+        todo!()
+    };
+
+    ret_addr
+}
+
+
 unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, dwRVA: u32) -> u32 {
     let pSectionHeaders = (pNtHeaders as usize + size_of::<IMAGE_NT_HEADERS>()) as *const IMAGE_SECTION_HEADER;
     let sectionHeaders = std::slice::from_raw_parts(pSectionHeaders, (*pNtHeaders).FileHeader.NumberOfSections as usize);
+
+    if dwRVA < sectionHeaders[0].PointerToRawData {
+        return dwRVA;
+    }
 
     for i in 0..(*pNtHeaders).FileHeader.NumberOfSections as usize {
         if (dwRVA >= sectionHeaders[i].VirtualAddress) && (dwRVA <= sectionHeaders[i].VirtualAddress + sectionHeaders[i].SizeOfRawData)
