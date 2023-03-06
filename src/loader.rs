@@ -341,7 +341,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // STEP 5: process all of our images relocations...
 
     // calculate the base address delta and perform relocations (even if we load at desired image base)
-    let szBaseAddressDelta = pBaseAddress - (*pNtHeaders).OptionalHeader.ImageBase;
+    let szBaseAddressDelta = pBaseAddress.wrapping_sub ((*pNtHeaders).OptionalHeader.ImageBase);
 
     // pBaseRelocDirectory = pointer to the relocation directory
     let pBaseRelocDirectory =
@@ -375,16 +375,16 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                 // which would not be very position independent!
                 if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_DIR64 {
                     let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut usize;
-                    *pRelocAddr += szBaseAddressDelta;
+                    *pRelocAddr = (*pRelocAddr).wrapping_add(szBaseAddressDelta);
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_HIGHLOW {
                     let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut u32;
-                    *pRelocAddr += szBaseAddressDelta as u32;
+                    *pRelocAddr = (*pRelocAddr).wrapping_add(szBaseAddressDelta as u32)
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_HIGH {
                     let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut u16;
-                    *pRelocAddr += hi_word(szBaseAddressDelta);
+                    *pRelocAddr += (*pRelocAddr).wrapping_add(hi_word(szBaseAddressDelta));
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_LOW {
                     let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut u16;
-                    *pRelocAddr += low_word(szBaseAddressDelta);
+                    *pRelocAddr += (*pRelocAddr).wrapping_add(low_word(szBaseAddressDelta));
                 }
             }
             uiValueC = (uiValueC as usize + (*uiValueC).SizeOfBlock as usize)

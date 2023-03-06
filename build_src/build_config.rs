@@ -3,7 +3,6 @@ const RESOURCE_NAME: &'static str = "resource.bin";
 
 const TARGET_PROCESS: &'static str = "notepad.exe";
 const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";
-const DLL_PATH: &'static str = "build_src/shellcode64.bin";
 
 //range for random byte generation. will generate random amount of junk data between resource entries.
 const RANGE_START: usize = 0;

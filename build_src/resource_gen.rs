@@ -161,7 +161,7 @@ impl ResourceGenerator {
         let mut consts = vec![];
 
         consts.push(format!(
-            "pub const {}: usize = {:#X};",
+            "pub const {}: u32 = {:#X};",
             "RESOURCE_ID", RESOURCE_ID
         ));
 

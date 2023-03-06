@@ -130,14 +130,14 @@ pub unsafe fn get_dll_base() -> usize {
     }
 }
 
-unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, ulRVA: u32) -> u32 {
+unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, dwRVA: u32) -> u32 {
     let pSectionHeaders = (pNtHeaders as usize + size_of::<IMAGE_NT_HEADERS>()) as *const IMAGE_SECTION_HEADER;
     let sectionHeaders = std::slice::from_raw_parts(pSectionHeaders, (*pNtHeaders).FileHeader.NumberOfSections as usize);
 
     for i in 0..(*pNtHeaders).FileHeader.NumberOfSections as usize {
-        if (ulRVA >= sectionHeaders[i].VirtualAddress) && (ulRVA <= sectionHeaders[i].VirtualAddress + sectionHeaders[i].SizeOfRawData)
+        if (dwRVA >= sectionHeaders[i].VirtualAddress) && (dwRVA <= sectionHeaders[i].VirtualAddress + sectionHeaders[i].SizeOfRawData)
         {
-            return sectionHeaders[i].PointerToRawData + (ulRVA - sectionHeaders[i].VirtualAddress);
+            return sectionHeaders[i].PointerToRawData + (dwRVA - sectionHeaders[i].VirtualAddress);
         }
     }
 
