@@ -36,6 +36,12 @@ pub type VirtualAlloc = unsafe extern "system" fn(
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize;
+pub type VirtualProtect = unsafe extern "system" fn(
+    lpAddress: usize,
+    dwSize: usize,
+    flNewProtect: u32,
+    lpflOldProtect: *mut u32,
+) -> bool;
 pub type WriteProcessMemory = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -50,7 +56,7 @@ pub type CreateRemoteThread = unsafe extern "system" fn(
     lpStartAddress: usize,
     lpParameter: usize,
     dwCreationFlags: u32,
-    lpThreadId: usize,
+    lpThreadId: *mut u32,
 ) -> usize;
 pub type WaitForSingleObject =
 unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
@@ -257,6 +263,7 @@ pub struct UNICODE_STRING {
 }
 
 pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
+pub const IMAGE_NT_SIGNATURE: u32 = 0x50450000;
 
 #[repr(C, packed(2))]
 pub struct IMAGE_DOS_HEADER {
@@ -309,7 +316,7 @@ pub struct IMAGE_OPTIONAL_HEADER {
     pub SizeOfUninitializedData: u32,
     pub AddressOfEntryPoint: u32,
     pub BaseOfCode: u32,
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(target_arch = "x86")]
     pub BaseOfData: u32,
     pub ImageBase: usize,
     pub SectionAlignment: u32,

