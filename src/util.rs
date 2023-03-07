@@ -147,19 +147,19 @@ extern "C" {
 #[cfg(all(windows, target_arch = "x86_64"))]
 global_asm!(
     r"
-            .global get_return
-            get_return:
-                mov rax, [rsp]
-                ret",
+.global get_return
+get_return:
+    mov rax, [rsp]
+    ret",
 );
 
 #[cfg(all(windows, target_arch = "x86"))]
 global_asm!(
     r"
-            .global get_return
-            get_return:
-                mov eax, [esp]
-                ret",
+.global _get_return
+_get_return:
+    mov eax, [esp]
+    ret",
 );
 
 // pub unsafe fn get_return() -> usize {

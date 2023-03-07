@@ -264,7 +264,7 @@ pub struct UNICODE_STRING {
 }
 
 pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
-pub const IMAGE_NT_SIGNATURE: u32 = 0x50450000;
+pub const IMAGE_NT_SIGNATURE: u32 = 0x4550;
 
 #[repr(C, packed(2))]
 pub struct IMAGE_DOS_HEADER {
