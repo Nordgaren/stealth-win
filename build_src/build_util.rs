@@ -1,5 +1,5 @@
-
 use std::ptr::addr_of_mut;
+use windows_sys::Win32::Security::Cryptography::{ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256, ALG_SID_SHA_256, ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, CryptAcquireContextW, CryptCreateHash, CryptDecrypt, CryptDeriveKey, CryptDestroyHash, CryptDestroyKey, CryptEncrypt, CryptGenKey, CryptGetKeyParam, CryptHashData, CryptReleaseContext, CryptSetKeyParam, KP_BLOCKLEN, KP_IV, KP_KEYLEN, PROV_RSA_AES};
 
 #[allow(non_snake_case)]
 fn get_key_len() -> usize {
@@ -59,6 +59,7 @@ fn get_key_len() -> usize {
         key_len as usize
     }
 }
+
 #[allow(non_snake_case)]
 fn get_iv_len() -> usize {
     unsafe {
@@ -110,8 +111,9 @@ fn get_iv_len() -> usize {
         len as usize
     }
 }
+
 #[allow(non_snake_case)]
-fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
+fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -137,7 +139,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
             panic!();
         }
 
-        if CryptHashData(hHash, aes_key.as_ptr(), aes_key.len() as u32, 0) == 0 {
+        if CryptHashData(hHash, key.as_ptr(), key.len() as u32, 0) == 0 {
             panic!();
         }
 
@@ -153,7 +155,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
             panic!();
         }
 
-        if CryptSetKeyParam(hKey, KP_IV, aes_iv.as_ptr(), 0) == 0 {
+        if CryptSetKeyParam(hKey, KP_IV, iv.as_ptr(), 0) == 0 {
             panic!();
         }
 
@@ -185,6 +187,86 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
         CryptDestroyKey(hKey);
 
         out
+    }
+}
+
+fn get_padding(slice: &[u8]) -> usize {
+    if slice.is_empty() {
+        return 0;
+    }
+
+    let pad = slice[slice.len() - 1];
+    for b in slice.iter().rev().take(pad as usize) {
+        if b != &pad {
+            return 0;
+        }
+    }
+
+    pad as usize
+}
+
+pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
+    unsafe {
+        let mut hProv = 0;
+        if CryptAcquireContextW(
+            addr_of_mut!(hProv),
+            0 as PCWSTR,
+            0 as *const u16,
+            PROV_RSA_AES,
+            CRYPT_VERIFYCONTEXT,
+        ) == 0
+        {
+            panic!();
+        }
+
+        let mut hHash = 0;
+        if !CryptCreateHash(
+            hProv,
+            ALG_CLASS_HASH | ALG_TYPE_ANY | ALG_SID_SHA_256,
+            0,
+            0,
+            addr_of_mut!(hHash),
+        ) == 0
+        {
+            panic!();
+        }
+
+        if !CryptHashData(hHash, key.as_ptr(), key.len() as u32, 0) == 0 {
+            panic!();
+        }
+
+        let mut hKey = 0;
+        if !CryptDeriveKey(
+            hProv,
+            ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK | ALG_SID_AES_256,
+            hHash,
+            0,
+            addr_of_mut!(hKey),
+        ) == 0
+        {
+            panic!();
+        }
+
+        if !CryptSetKeyParam(hKey, KP_IV, iv.as_ptr(), 0) == 0 {
+            panic!();
+        }
+
+        let mut len = bytes.len() as u32;
+        let mut payload = bytes.to_vec();
+        if !CryptDecrypt(hKey, 0, 0, 0, payload.as_mut_ptr(), addr_of_mut!(len)) == 0 {
+            panic!();
+        }
+
+        CryptReleaseContext(hProv, 0);
+        CryptDestroyHash(hHash);
+        CryptDestroyKey(hKey);
+
+        let pad = get_padding(&bytes[..]);
+        if pad > 0 {
+            payload.truncate(bytes.len() - pad);
+        }
+
+        payload
     }
 }
 

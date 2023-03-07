@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::consts::*;
-use crate::util::get_resource_bytes;
+use crate::util::{get_resource_bytes, get_unmapped_resource_bytes};
 use crate::winapi::*;
 use crate::winternals::*;
 use std::ptr::addr_of_mut;
@@ -15,8 +15,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
             0 as *const u16,
             PROV_RSA_AES,
             CRYPT_VERIFYCONTEXT,
-        )
-        {
+        ) {
             panic!();
         }
 
@@ -27,8 +26,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
             0,
             0,
             addr_of_mut!(hHash),
-        )
-        {
+        ) {
             panic!();
         }
 
@@ -43,8 +41,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
             hHash,
             0,
             addr_of_mut!(hKey),
-        )
-        {
+        ) {
             panic!();
         }
 
@@ -60,8 +57,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
             addr_of_mut!(block_len) as *mut u8,
             addr_of_mut!(len),
             0,
-        )
-        {
+        ) {
             panic!();
         }
 
@@ -139,9 +135,31 @@ pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
     }
 }
 
+pub fn get_aes_encrypted_resource_bytes_unmapped(offset: usize, len: usize) -> Vec<u8> {
+    unsafe {
+        let mut resource = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
+        let key = get_unmapped_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
+        let iv = get_unmapped_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
+        aes_decrypt_bytes(&mut resource, key.as_slice(), iv.as_slice());
+
+        resource
+    }
+}
+
 pub fn get_xor_encrypted_string(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
     let key = get_resource_bytes(RESOURCE_ID, key_offset, len);
     let mut buff = get_resource_bytes(RESOURCE_ID, offset, len);
+
+    for i in 0..len {
+        buff[i] ^= key[i];
+    }
+
+    buff
+}
+
+pub fn get_xor_encrypted_string_unmapped(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
+    let key = get_unmapped_resource_bytes(RESOURCE_ID, key_offset, len);
+    let mut buff = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
 
     for i in 0..len {
         buff[i] ^= key[i];

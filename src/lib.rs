@@ -60,12 +60,15 @@ fn load_libraries() {
 
 #[cfg(test)]
 mod tests {
+    use crate::hash::hash_case_insensitive;
     use crate::loader::ReflectiveLoader;
     use crate::util::{get_dll_base, get_return};
 
     #[test]
     fn it_works() {
         unsafe {
+            let lol = "KERNEL32.DLL".to_string().encode_utf16().collect::<Vec<u16>>();
+            println!("{} {}", hash_case_insensitive(lol.as_ptr() as usize, lol.len() * 2), hash_case_insensitive(lol.as_ptr() as usize, lol.len() * 2));
             // println!("{:X} {:X}", get_return(), get_dll_base());
             // println!("{:X}", get_return());
             // println!("{:X}", get_return());
