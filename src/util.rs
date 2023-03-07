@@ -1,10 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::consts::*;
-use crate::winapi::*;
 use crate::winternals::*;
-use std::arch::{asm, global_asm};
-use std::fs;
+use std::arch::global_asm;
 use std::mem::size_of;
 
 pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
@@ -19,14 +17,14 @@ pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
 }
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
-    let mut resource = unsafe { get_resource(resource_id) };
+    let resource = unsafe { get_resource(resource_id) };
     let end = offset + len;
 
     resource[offset..end].to_vec()
 }
 
 pub fn get_unmapped_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
-    let mut resource = unsafe { get_unmapped_resource(resource_id) };
+    let resource = unsafe { get_unmapped_resource(resource_id) };
     let end = offset + len;
 
     resource[offset..end].to_vec()
@@ -120,7 +118,7 @@ pub unsafe fn get_dll_base() -> usize {
 
     loop {
         // for some reason, 16 byte alignment is unstable for this function, in x86, so use sizeof::<usize>() * 2
-        pLibraryAddress -= (size_of::<usize>() * 2);
+        pLibraryAddress -= size_of::<usize>() * 2;
 
         let pos = pLibraryAddress as *const u16;
         if IMAGE_DOS_SIGNATURE == *pos {
@@ -139,7 +137,6 @@ pub unsafe fn get_dll_base() -> usize {
     }
 }
 
-#[no_mangle]
 extern "C" {
     pub fn get_return() -> usize;
 }

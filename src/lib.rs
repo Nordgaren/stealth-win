@@ -1,5 +1,5 @@
-#[allow(non_snake_case)]
-extern crate core;
+#![allow(non_upper_case_globals)]
+#![allow(non_snake_case)]
 
 mod consts;
 mod crypto_util;
@@ -7,6 +7,7 @@ mod loader;
 mod util;
 mod winapi;
 mod winternals;
+mod hash;
 
 use crate::consts::*;
 use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
@@ -60,18 +61,17 @@ fn load_libraries() {
 #[cfg(test)]
 mod tests {
     use crate::loader::ReflectiveLoader;
-    use crate::util::get_return;
-    use std::ptr::addr_of_mut;
+    use crate::util::{get_dll_base, get_return};
 
     #[test]
     fn it_works() {
         unsafe {
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            //ReflectiveLoader(0 as *mut usize);
+            // println!("{:X} {:X}", get_return(), get_dll_base());
+            // println!("{:X}", get_return());
+            // println!("{:X}", get_return());
+            // println!("{:X}", get_return());
+            // println!("{:X}", get_return());
+            ReflectiveLoader(0 as *mut usize);
         }
     }
 }

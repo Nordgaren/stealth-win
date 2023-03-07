@@ -71,6 +71,7 @@ static XOR_HASH: [&str; 13] = [
     "CryptDecrypt",
     "CryptReleaseContext",
     "CryptSetKeyParam",
+    "CryptGetKeyParam",
     "CryptDestroyHash",
     "CryptDestroyKey",
     "ADVAPI32.dll",

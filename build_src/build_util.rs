@@ -1,5 +1,7 @@
+
 use std::ptr::addr_of_mut;
 
+#[allow(non_snake_case)]
 fn get_key_len() -> usize {
     unsafe {
         let mut hProv = 0;
@@ -57,7 +59,7 @@ fn get_key_len() -> usize {
         key_len as usize
     }
 }
-
+#[allow(non_snake_case)]
 fn get_iv_len() -> usize {
     unsafe {
         let mut hProv = 0;
@@ -108,8 +110,8 @@ fn get_iv_len() -> usize {
         len as usize
     }
 }
-
-fn encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
+#[allow(non_snake_case)]
+fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(

@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
+#![allow(unused)]
 
 pub type DllMain =
     extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
@@ -176,6 +177,8 @@ pub const ALG_SID_AES_256: u32 = 16;
 pub const CALG_AES_256: u32 = ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK | ALG_SID_AES_256;
 
 pub const KP_IV: u32 = 1;
+pub const KP_BLOCKLEN: u32 = 8u32;
+pub const KP_KEYLEN: u32 = 9u32;
 
 pub const PROV_RSA_AES: u32 = 24;
 pub const CRYPT_VERIFYCONTEXT: u32 = 0xF0000000;

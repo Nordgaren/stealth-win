@@ -1,16 +1,13 @@
 //my rust implementation of https://github.com/stephenfewer/ReflectiveDLLInjection/blob/178ba2a6a9feee0a9d9757dcaa65168ced588c12/dll/src/ReflectiveLoader.c
 #![allow(non_snake_case)]
 
-use crate::consts::*;
-use crate::crypto_util::get_aes_encrypted_resource_bytes;
-use crate::util::{get_dll_base, get_resource_bytes, get_unmapped_resource_bytes};
+use crate::util::get_dll_base;
 use crate::winapi::get_peb;
 use crate::winternals::*;
-use std::arch::asm;
-use std::ffi::c_uint;
 use std::mem::size_of;
 use std::ptr::addr_of;
 use std::{fs, mem};
+use crate::hash::{hash, hash_case_insensitive};
 
 const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
 const NTDLLDLL_HASH: u32 = 0x3CFA685D;
@@ -18,7 +15,6 @@ const LOADLIBRARYA_HASH: u32 = 0xEC0E4E8E;
 const GETPROCADDRESS_HASH: u32 = 0x7C0DFCAA;
 const VIRTUALALLOC_HASH: u32 = 0x91AFCA54;
 const NTFLUSHINSTRUCTIONCACHE_HASH: u32 = 0x534C0AB8;
-const HASH_KEY: u32 = 13;
 
 #[no_mangle]
 pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
@@ -28,11 +24,10 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     let pLibraryAddress = get_dll_base();
 
     // if debugging from library tests, use a copy of the file loaded into memory, as the dll base.
-    // let dll_file = fs::read(
-    //     r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
-    // ).unwrap();
-    // let pLibraryAddress = dll_file.as_ptr() as usize;
-
+    let pLibraryAddress = fs::read(
+        r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
+    ).unwrap();
+    let pLibraryAddress = pLibraryAddress.as_ptr() as usize;
     // STEP 1: process the kernels exports for the functions our loader needs...
     // get the Process Environment Block
     let peb = get_peb();
@@ -50,25 +45,11 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         // use a truncated definition of LDR_DATA_TABLE_ENTRY, since we are moving through the InMemoryOrderModuleList
         let pTruncLdrTableDataEntry = pModuleList as *const TRUNC_LDR_DATA_TABLE_ENTRY;
         // get pointer to current modules name (unicode string)
-        let mut pBuffer = (*pTruncLdrTableDataEntry).BaseDllName.Buffer as *mut u8;
+        let pBuffer = (*pTruncLdrTableDataEntry).BaseDllName.Buffer as usize;
         // set bCounter to the length for the loop
-        let mut usCounter = (*pTruncLdrTableDataEntry).BaseDllName.Length;
+        let mut usCounter = (*pTruncLdrTableDataEntry).BaseDllName.Length  as usize;
         // clear uiValueC which will store the hash of the module name
-        let mut dwModuleHash = 0u32;
-
-        //this is a non case-sensitive hash function
-        while usCounter != 0 {
-            dwModuleHash = u32::rotate_right(dwModuleHash, HASH_KEY);
-
-            if *pBuffer >= 0x61 {
-                dwModuleHash += (*pBuffer - 0x20) as u32;
-            } else {
-                dwModuleHash += *pBuffer as u32;
-            }
-
-            pBuffer = (pBuffer as usize + 1) as *mut u8;
-            usCounter -= 1;
-        }
+        let dwModuleHash = hash_case_insensitive(pBuffer, usCounter);
 
         // compare the hash with that of kernel32.dll
         if dwModuleHash == KERNEL32DLL_HASH {
@@ -89,22 +70,18 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                 as *const IMAGE_EXPORT_DIRECTORY;
 
             // get the VA for the array of name pointers
-            let mut uiNameArray =
+            let uiNameArray =
                 (lpBaseAddress + (*uiExportDir).AddressOfNames as usize) as *const u32;
             let sNameArray: &'static [u32] =
                 std::slice::from_raw_parts(uiNameArray, (*uiExportDir).NumberOfNames as usize);
 
             // get the VA for the array of name ordinals
-            let mut uiNameOrdinals =
+            let uiNameOrdinals =
                 (lpBaseAddress + (*uiExportDir).AddressOfNameOrdinals as usize) as *const u16;
             let sNameOrdinals: &'static [u16] =
                 std::slice::from_raw_parts(uiNameOrdinals, (*uiExportDir).NumberOfNames as usize);
 
             usCounter = 3;
-
-            for sNameOrdinal in sNameOrdinals {
-                if *sNameOrdinal == 0x30 {}
-            }
 
             while usCounter > 0 {
                 for i in 0..sNameArray.len() {
@@ -155,13 +132,13 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                 as *const IMAGE_EXPORT_DIRECTORY;
 
             // get the VA for the array of name pointers
-            let mut uiNameArray =
+            let uiNameArray =
                 (lpBaseAddress + (*uiExportDir).AddressOfNames as usize) as *const u32;
             let sNameArray: &'static [u32] =
                 std::slice::from_raw_parts(uiNameArray, (*uiExportDir).NumberOfNames as usize);
 
             // get the VA for the array of name ordinals
-            let mut uiNameOrdinals =
+            let uiNameOrdinals =
                 (lpBaseAddress + (*uiExportDir).AddressOfNameOrdinals as usize) as *const u16;
             let sNameOrdinals: &'static [u16] =
                 std::slice::from_raw_parts(uiNameOrdinals, (*uiExportDir).NumberOfNames as usize);
@@ -233,7 +210,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
 
     // Make slices from the addresses we have, so that the process of copying over the data is easier, in rust.
     let sHeaderSource = std::slice::from_raw_parts(pLibraryAddress as *const u8, uiSize as usize);
-    let mut sHeaderDest = std::slice::from_raw_parts_mut(pBaseAddress as *mut u8, uiSize as usize);
+    let sHeaderDest = std::slice::from_raw_parts_mut(pBaseAddress as *mut u8, uiSize as usize);
 
     for i in 0..sHeaderSource.len() {
         sHeaderDest[i] = sHeaderSource[i];
@@ -262,7 +239,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
 
         // Make slices from the addresses we have, so that the process of copying over the data is easier, in rust.
         let sSectionSource = std::slice::from_raw_parts(pSourceAddress as *const u8, szSize);
-        let mut sSectionDest = std::slice::from_raw_parts_mut(pDestAddress as *mut u8, szSize);
+        let sSectionDest = std::slice::from_raw_parts_mut(pDestAddress as *mut u8, szSize);
         for i in 0..sSectionSource.len() {
             sSectionDest[i] = sSectionSource[i];
         }
@@ -296,7 +273,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         let mut pImportAddressTable =
             (pBaseAddress + sImageImportDescriptor.FirstThunk as usize) as *mut usize;
 
-        // itterate through all imported functions, importing by ordinal if no name present
+        // iterate through all imported functions, importing by ordinal if no name present
         while *pImportAddressTable != 0 {
             // sanity check uiValueD as some compilers only import by FirstThunk
             if *pOriginalFirstThunk & IMAGE_ORDINAL_FLAG != 0 {
@@ -430,15 +407,3 @@ fn get_type(bitfield: u16) -> u16 {
     bitfield >> 12
 }
 
-#[inline(always)]
-unsafe fn hash(strPtr: usize) -> u32 {
-    let mut pBuffer = strPtr as *const u8;
-    let mut dwModuleHash = 0;
-    while *pBuffer != 0 {
-        dwModuleHash = u32::rotate_right(dwModuleHash, HASH_KEY);
-        dwModuleHash += *pBuffer as u32;
-        pBuffer = (pBuffer as usize + 1) as *const u8;
-    }
-
-    dwModuleHash
-}

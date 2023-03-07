@@ -158,6 +158,26 @@ impl ResourceGenerator {
         payload.extend(&self.target);
     }
 
+    fn add_aes_string_to_payload(&mut self, payload: &mut Vec<u8>) {
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        payload.extend(bytes);
+
+        let mut aes_string = self.aes_strings.pop().expect("No string info to pop!");
+        aes_string.offset = payload.len();
+        payload.extend(&aes_string.encrypted);
+        self.aes_strings.insert(0, aes_string);
+    }
+
+    fn add_aes_hash_to_payload(&mut self, payload: &mut Vec<u8>) {
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        payload.extend(bytes);
+
+        let mut aes_hash = self.aes_hashes.pop().expect("No string info to pop!");
+        aes_hash.offset = payload.len();
+        payload.extend(&aes_hash.encrypted);
+        self.aes_hashes.insert(0, aes_hash);
+    }
+
     fn add_xor_string_to_payload(&mut self, payload: &mut Vec<u8>) {
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
         payload.extend(bytes);
@@ -217,7 +237,7 @@ impl ResourceGenerator {
     }
 
     fn build_consts_file(&self) {
-        let mut consts = vec![];
+        let mut consts = vec!["#![allow(unused)]".to_string()];
 
         consts.push(format!(
             "pub const {}: u32 = {:#X};",
