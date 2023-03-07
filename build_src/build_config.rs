@@ -27,7 +27,42 @@ static AES_STRINGS: [&str; 16] = [
     "USER32.dll",
 ];
 
-static XOR_STRINGS: [&str; 12] = [
+static XOR_STRINGS: [&str; 13] = [
+    "LoadLibraryA",
+    "CryptAcquireContextW",
+    "CryptCreateHash",
+    "CryptHashData",
+    "CryptDeriveKey",
+    "CryptDecrypt",
+    "CryptReleaseContext",
+    "CryptSetKeyParam",
+    "CryptGetKeyParam",
+    "CryptDestroyHash",
+    "CryptDestroyKey",
+    "ADVAPI32.dll",
+    "KERNEL32.DLL",
+];
+
+static AES_HASH: [&str; 16] = [
+    "VirtualAlloc",
+    "VirtualAllocEx",
+    "VirtualProtect",
+    "CreateRemoteThread",
+    "WaitForSingleObject",
+    "WriteProcessMemory",
+    "OpenProcess",
+    "RtlMoveMemory",
+    "CreateToolhelp32Snapshot",
+    "Process32First",
+    "Process32Next",
+    "CloseHandle",
+    "GetLastError",
+    "ReflectiveLoader",
+    "MessageBoxA",
+    "USER32.dll",
+];
+
+static XOR_HASH: [&str; 13] = [
     "LoadLibraryA",
     "CryptAcquireContextW",
     "CryptCreateHash",

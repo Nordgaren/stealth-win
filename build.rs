@@ -1,5 +1,8 @@
 use winresource::WindowsResource;
+
 include!("build_src/resource_gen.rs");
+#[path = "src//hash.rs"]
+mod loader;
 
 fn main() {
     let mut gen = ResourceGenerator::new();
