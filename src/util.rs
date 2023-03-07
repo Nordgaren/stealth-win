@@ -79,11 +79,7 @@ unsafe fn get_resource_data_entry(
         (pResourceDirAddr as usize + offset as usize) as *const RESOURCE_DIRECTORY_TABLE;
     let pDataResourceEntries =
         pDataResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let mut offset = get_id_entry_offset(
-        pDataResourceDirAddr,
-        pDataResourceEntries,
-        resource_id,
-    );
+    let mut offset = get_id_entry_offset(pDataResourceDirAddr, pDataResourceEntries, resource_id);
     offset &= 0x7FFFFFFF;
 
     //level 3: language subdirectory - just use the first entry.
