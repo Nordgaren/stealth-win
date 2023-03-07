@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 
-use std::arch::asm;
-use std::fs;
 use crate::consts::*;
 use crate::winapi::*;
 use crate::winternals::*;
+use std::arch::{asm, global_asm};
+use std::fs;
 use std::mem::size_of;
 
 pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
@@ -119,12 +119,10 @@ unsafe fn get_id_entry_offset(
 const ALIGN_16: usize = usize::MAX - 0xF;
 
 pub unsafe fn get_dll_base() -> usize {
-
     // functions always end on 16 byte aligned address, relative to the beginning of the file.
     let mut pLibraryAddress = get_return() & ALIGN_16;
 
     loop {
-
         // for some reason, 16 byte alignment is unstable for this function, in x86, so use sizeof::<usize>() * 2
         pLibraryAddress -= (size_of::<usize>() * 2);
 
@@ -135,7 +133,8 @@ pub unsafe fn get_dll_base() -> usize {
             // we sanity check the e_lfanew with an upper threshold value of 1024 to avoid problems.
             if (*pDosHeader).e_lfanew < 0x400 {
                 // break if we have found a valid MZ/PE header
-                let pNtHeaders = (pLibraryAddress + (*pDosHeader).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
+                let pNtHeaders =
+                    (pLibraryAddress + (*pDosHeader).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
                 if (*pNtHeaders).Signature == IMAGE_NT_SIGNATURE {
                     return pLibraryAddress;
                 }
@@ -144,36 +143,63 @@ pub unsafe fn get_dll_base() -> usize {
     }
 }
 
-pub unsafe fn get_return() -> usize {
-    let mut ret_addr = 0usize;
-    if cfg!(all(windows, target_arch = "x86_64")) {
-        asm!(
-        "lea {ret_addr}, [rip]",
-        ret_addr = out(reg) ret_addr,
-        );
-    } else if cfg!(all(windows, target_arch = "x86")) {
-        asm!(
-        "mov {ret_addr}, [esp + 4]",
-        ret_addr = out(reg) ret_addr,
-        );
-    } else if cfg!(all(windows, target_arch = "aarch64")) {
-        todo!()
-    };
-
-    ret_addr
+#[no_mangle]
+extern "C" {
+    pub fn get_return() -> usize;
 }
 
+#[cfg(all(windows, target_arch = "x86_64"))]
+global_asm!(
+    r"
+            .global get_return
+            get_return:
+                mov rax, [rsp]
+                ret",
+);
+
+#[cfg(all(windows, target_arch = "x86"))]
+global_asm!(
+    r"
+            .global get_return
+            get_return:
+                mov eax, [esp]
+                ret",
+);
+
+// pub unsafe fn get_return() -> usize {
+//     let mut ret_addr = 0usize;
+//     if cfg!(all(windows, target_arch = "x86_64")) {
+//         asm!(
+//         "lea {ret_addr}, [rip]",
+//         ret_addr = out(reg) ret_addr,
+//         );
+//     } else if cfg!(all(windows, target_arch = "x86")) {
+//         asm!(
+//         "mov {ret_addr}, [esp + 4]",
+//         ret_addr = out(reg) ret_addr,
+//         );
+//     } else if cfg!(all(windows, target_arch = "aarch64")) {
+//         todo!()
+//     };
+//
+//     ret_addr
+// }
 
 unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, dwRVA: u32) -> u32 {
-    let pSectionHeaders = (pNtHeaders as usize + size_of::<IMAGE_NT_HEADERS>()) as *const IMAGE_SECTION_HEADER;
-    let sectionHeaders = std::slice::from_raw_parts(pSectionHeaders, (*pNtHeaders).FileHeader.NumberOfSections as usize);
+    let pSectionHeaders =
+        (pNtHeaders as usize + size_of::<IMAGE_NT_HEADERS>()) as *const IMAGE_SECTION_HEADER;
+    let sectionHeaders = std::slice::from_raw_parts(
+        pSectionHeaders,
+        (*pNtHeaders).FileHeader.NumberOfSections as usize,
+    );
 
     if dwRVA < sectionHeaders[0].PointerToRawData {
         return dwRVA;
     }
 
     for i in 0..(*pNtHeaders).FileHeader.NumberOfSections as usize {
-        if (dwRVA >= sectionHeaders[i].VirtualAddress) && (dwRVA <= sectionHeaders[i].VirtualAddress + sectionHeaders[i].SizeOfRawData)
+        if (dwRVA >= sectionHeaders[i].VirtualAddress)
+            && (dwRVA <= sectionHeaders[i].VirtualAddress + sectionHeaders[i].SizeOfRawData)
         {
             return sectionHeaders[i].PointerToRawData + (dwRVA - sectionHeaders[i].VirtualAddress);
         }

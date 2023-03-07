@@ -55,11 +55,17 @@ fn load_libraries() {
 mod tests {
     use std::ptr::addr_of_mut;
     use crate::loader::ReflectiveLoader;
+    use crate::util::get_return;
 
     #[test]
     fn it_works() {
         unsafe {
-            ReflectiveLoader(0 as *mut usize);
+            println!("{:X}", get_return());
+            println!("{:X}", get_return());
+            println!("{:X}", get_return());
+            println!("{:X}", get_return());
+            println!("{:X}", get_return());
+            //ReflectiveLoader(0 as *mut usize);
         }
     }
 }
