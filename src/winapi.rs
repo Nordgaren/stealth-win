@@ -30,7 +30,6 @@ pub unsafe fn get_peb() -> *const PEB {
 }
 
 pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
-
     let mut peb = get_peb();
 
     if sModuleName.is_empty() {
@@ -169,7 +168,7 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
             CREATETOOLHELP32SNAPSHOT_POS,
             CREATETOOLHELP32SNAPSHOT_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
@@ -337,7 +336,7 @@ pub unsafe fn CryptAcquireContextW(
             CRYPTACQUIRECONTEXTW_KEY,
             CRYPTACQUIRECONTEXTW_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)
@@ -361,7 +360,7 @@ pub unsafe fn CryptCreateHash(
             CRYPTCREATEHASH_KEY,
             CRYPTCREATEHASH_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptCreateHash(phProv, ALG_ID, hKey, dwFlags, phHash)
@@ -413,7 +412,7 @@ pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwF
             CRYPTSETKEYPARAM_KEY,
             CRYPTSETKEYPARAM_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)
@@ -472,7 +471,7 @@ pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
             CRYPTRELEASECONTEXT_KEY,
             CRYPTRELEASECONTEXT_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptReleaseContext(hProv, dwFlags)
@@ -490,7 +489,7 @@ pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
             CRYPTDESTROYKEY_KEY,
             CRYPTDESTROYKEY_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptDestroyKey(hKey)
@@ -508,7 +507,7 @@ pub unsafe fn CryptDestroyHash(hHash: usize) -> bool {
             CRYPTDESTROYHASH_KEY,
             CRYPTDESTROYHASH_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptDestroyHash(hHash)
@@ -538,4 +537,3 @@ pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, 
 
     messageBoxA(hWnd, lpText, lpCaption, uType)
 }
-

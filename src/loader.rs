@@ -33,7 +33,6 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // ).unwrap();
     // let pLibraryAddress = dll_file.as_ptr() as usize;
 
-
     // STEP 1: process the kernels exports for the functions our loader needs...
     // get the Process Environment Block
     let peb = get_peb();
@@ -218,8 +217,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
 
     // get the VA of the NT Header for the PE to be loaded
     let pDosHeader = pLibraryAddress as *const IMAGE_DOS_HEADER;
-    let pNtHeaders =
-        (pLibraryAddress + (*pDosHeader).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
+    let pNtHeaders = (pLibraryAddress + (*pDosHeader).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
 
     // allocate all the memory for the DLL to be loaded into. we can load at any address because we will
     // relocate the image. Also zeros all memory and marks it as READ, WRITE and EXECUTE to avoid any problems.
@@ -346,7 +344,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // STEP 5: process all of our images relocations...
 
     // calculate the base address delta and perform relocations (even if we load at desired image base)
-    let szBaseAddressDelta = pBaseAddress.wrapping_sub ((*pNtHeaders).OptionalHeader.ImageBase);
+    let szBaseAddressDelta = pBaseAddress.wrapping_sub((*pNtHeaders).OptionalHeader.ImageBase);
 
     // pBaseRelocDirectory = pointer to the relocation directory
     let pBaseRelocDirectory =

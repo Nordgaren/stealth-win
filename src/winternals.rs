@@ -1,28 +1,29 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
-pub type DllMain = extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
+pub type DllMain =
+    extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
 
 //KERNEL32.DLL
 pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type GetLastError = unsafe extern "system" fn() -> u32;
 pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FindResourceA =
-unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
 pub type LockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
 pub type SizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
 pub type CreateToolhelp32Snapshot =
-unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type Process32First =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type Process32Next =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type OpenProcess =
-unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type NtFlushInstructionCache =
-unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 pub type VirtualAllocEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -59,7 +60,7 @@ pub type CreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type WaitForSingleObject =
-unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 
 pub const TH32CS_SNAPPROCESS: u32 = 0x00000002;
 pub const INVALID_HANDLE_VALUE: usize = usize::MAX;
@@ -127,7 +128,7 @@ pub type CryptHashData = unsafe extern "system" fn(
     dwFlags: u32,
 ) -> bool;
 pub type CryptSetKeyParam =
-unsafe extern "system" fn(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool;
+    unsafe extern "system" fn(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool;
 pub type CryptGetKeyParam = unsafe extern "system" fn(
     hKey: usize,
     dwParam: u32,
@@ -381,12 +382,11 @@ pub struct IMAGE_IMPORT_DESCRIPTOR {
 pub struct IMAGE_BASE_RELOCATION {
     pub VirtualAddress: u32,
     pub SizeOfBlock: u32,
-//  WORD    TypeOffset[1];
+    //  WORD    TypeOffset[1];
 }
 
 #[repr(C)]
-pub struct IMAGE_RELOC
-{
+pub struct IMAGE_RELOC {
     pub bitfield: u16,
 }
 

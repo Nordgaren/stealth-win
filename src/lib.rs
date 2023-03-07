@@ -1,17 +1,17 @@
 #[allow(non_snake_case)]
 extern crate core;
 
-mod loader;
+mod consts;
 mod crypto_util;
+mod loader;
 mod util;
 mod winapi;
 mod winternals;
-mod consts;
 
-use winternals::*;
-use crate::consts::{ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN, ADVAPI32_DLL_POS, USER32_DLL_LEN, USER32_DLL_POS};
+use crate::consts::*;
 use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
 use crate::winapi::*;
+use winternals::*;
 
 static mut hAppInstance: usize = 0;
 
@@ -23,14 +23,19 @@ pub extern "stdcall" fn DllMain(hinstDLL: usize, dwReason: u32, lpReserved: *mut
             unsafe {
                 hAppInstance = hinstDLL;
                 load_libraries();
-                MessageBoxA(0, "Hello from DllMain!\0".as_ptr(), "Reflective Dll Injection\0".as_ptr(), MB_OK);
+                MessageBoxA(
+                    0,
+                    "Hello from DllMain!\0".as_ptr(),
+                    "Reflective Dll Injection\0".as_ptr(),
+                    MB_OK,
+                );
             }
             return true as i32;
         }
         DLL_QUERY_HMODULE => {
-            unsafe  {
+            unsafe {
                 if lpReserved as usize != 0 {
-                    *lpReserved =  hAppInstance;
+                    *lpReserved = hAppInstance;
                 }
             }
             return true as i32;
@@ -41,11 +46,12 @@ pub extern "stdcall" fn DllMain(hinstDLL: usize, dwReason: u32, lpReserved: *mut
 
 fn load_libraries() {
     unsafe {
-        let mut advapi = get_xor_encrypted_string(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN);
+        let mut advapi =
+            get_xor_encrypted_string(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN);
         advapi.push(0);
         LoadLibraryA(advapi.as_ptr());
 
-        let mut  user32 = get_aes_encrypted_resource_bytes(USER32_DLL_POS, USER32_DLL_LEN);
+        let mut user32 = get_aes_encrypted_resource_bytes(USER32_DLL_POS, USER32_DLL_LEN);
         user32.push(0);
         LoadLibraryA(user32.as_ptr());
     }
@@ -53,9 +59,9 @@ fn load_libraries() {
 
 #[cfg(test)]
 mod tests {
-    use std::ptr::addr_of_mut;
     use crate::loader::ReflectiveLoader;
     use crate::util::get_return;
+    use std::ptr::addr_of_mut;
 
     #[test]
     fn it_works() {

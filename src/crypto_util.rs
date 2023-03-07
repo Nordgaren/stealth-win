@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 
-use std::fmt::format;
-use std::fs;
 use crate::consts::*;
 use crate::util::get_resource_bytes;
 use crate::winapi::*;
 use crate::winternals::*;
+use std::fmt::format;
+use std::fs;
 use std::ptr::addr_of_mut;
 
 pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
