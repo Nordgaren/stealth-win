@@ -1,12 +1,5 @@
 use windows_sys::core::PCWSTR;
-use windows_sys::Win32::Foundation::GetLastError;
-use windows_sys::Win32::Security::Cryptography::{
-    CryptAcquireContextW, CryptCreateHash, CryptDeriveKey, CryptDestroyHash,
-    CryptDestroyKey, CryptEncrypt, CryptGenKey, CryptGetKeyParam, CryptHashData,
-    CryptReleaseContext, CryptSetKeyParam, ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256,
-    ALG_SID_SHA_256, ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, KP_BLOCKLEN, KP_IV,
-    KP_KEYLEN, PROV_RSA_AES,
-};
+
 
 use rand;
 use rand::seq::SliceRandom;
@@ -99,12 +92,15 @@ impl ResourceGenerator {
                 hash(string_name.as_ptr() as usize)
             };
 
-            // let mut hash = hash.to_ne_bytes().to_vec();
-            // hash.extend(generate_random_bytes(12));
-
             let encrypted = aes_encrypt_bytes(&hash.to_ne_bytes(), &aes_key, &aes_iv);
-            let dec = aes_decrypt_bytes(encrypted.clone(), &aes_key, &aes_iv);
-            //panic!("{:?} {:?}", encrypted,dec);
+            // if string_name == "NtFlushInstructionCache" {
+            // }
+            // if string_name == "GetProcAddress" {
+            // }
+            // if string_name == "VirtualAlloc" {
+            //     fs::write("va.txt", format!("\n{:X?}\n{:X?}\n{:X?}", encrypted, aes_iv, aes_key));
+            // }
+
             aes_hashes.push(AESHash {
                 string_name,
                 encrypted,
@@ -315,15 +311,29 @@ impl ResourceGenerator {
         for string in &self.aes_hashes {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "HASH_POS",
+                string.string_name.to_uppercase().replace(".", "_") + "_HASH_POS",
                 string.offset
             ));
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "HASH_LEN",
+                string.string_name.to_uppercase().replace(".", "_") + "_HASH_LEN",
                 string.encrypted.len()
             ));
         }
+
+        // consts.push(format!(
+        //     "pub const {}: [u8;{:#X}] = {:#X?};",
+        //     "KEY_BYTES",
+        //     self.aes_key.len(),
+        //     self.aes_key
+        // ));
+        //
+        // consts.push(format!(
+        //     "pub const {}: [u8;{:#X}] = {:#X?};",
+        //     "IV_BYTES",
+        //     self.aes_iv.len(),
+        //     self.aes_iv
+        // ));
 
         for string in &self.xor_strings {
             consts.push(format!(
@@ -346,17 +356,17 @@ impl ResourceGenerator {
         for string in &self.xor_hashes {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "HASH_POS",
+                string.string_name.to_uppercase().replace(".", "_") + "_HASH_POS",
                 string.offset
             ));
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "HASH_LEN",
+                string.string_name.to_uppercase().replace(".", "_") + "_HASH_LEN",
                 string.encrypted.len()
             ));
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "HASH_KEY",
+                string.string_name.to_uppercase().replace(".", "_") + "_HASH_KEY",
                 string.key_offset
             ));
         }

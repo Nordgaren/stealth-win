@@ -1,4 +1,5 @@
 use std::ptr::addr_of_mut;
+use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Security::Cryptography::{ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256, ALG_SID_SHA_256, ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, CryptAcquireContextW, CryptCreateHash, CryptDecrypt, CryptDeriveKey, CryptDestroyHash, CryptDestroyKey, CryptEncrypt, CryptGenKey, CryptGetKeyParam, CryptHashData, CryptReleaseContext, CryptSetKeyParam, KP_BLOCKLEN, KP_IV, KP_KEYLEN, PROV_RSA_AES};
 
 #[allow(non_snake_case)]
@@ -56,7 +57,7 @@ fn get_key_len() -> usize {
             panic!();
         }
 
-        key_len as usize
+        (key_len / 8) as usize
     }
 }
 
@@ -205,6 +206,7 @@ fn get_padding(slice: &[u8]) -> usize {
     pad as usize
 }
 
+#[allow(non_snake_case)]
 pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
@@ -261,7 +263,7 @@ pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
         CryptDestroyHash(hHash);
         CryptDestroyKey(hKey);
 
-        let pad = get_padding(&bytes[..]);
+        let pad = get_padding(&payload[..]);
         if pad > 0 {
             payload.truncate(bytes.len() - pad);
         }

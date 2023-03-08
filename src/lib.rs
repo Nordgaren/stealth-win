@@ -1,6 +1,8 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
+extern crate core;
+
 mod consts;
 mod crypto_util;
 mod loader;

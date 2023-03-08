@@ -3,6 +3,7 @@
 use crate::consts::*;
 use crate::winternals::*;
 use std::arch::global_asm;
+use std::fs;
 use std::mem::size_of;
 
 pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
@@ -48,6 +49,10 @@ unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
 
 unsafe fn get_unmapped_resource(resource_id: u32) -> &'static [u8] {
     let pBaseAddr = get_dll_base();
+    // let pBaseAddr = fs::read(
+    //     r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
+    // ).unwrap();
+    // let pBaseAddr = pBaseAddr.as_ptr() as usize;
     let pDosHdr = pBaseAddr as *const IMAGE_DOS_HEADER;
     let pNTHdrs = (pBaseAddr + (*pDosHdr).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
     let pOptionalHdr = &(*pNTHdrs).OptionalHeader;

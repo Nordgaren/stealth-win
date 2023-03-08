@@ -20,9 +20,7 @@ pub fn hash(str_ptr: usize) -> u32 {
 #[inline(always)]
 pub fn hash_case_insensitive(str_ptr: usize, len: usize) -> u32 {
     unsafe {
-        let mut pBuffer = str_ptr as *const u8;
-        let mut len = len;
-
+        let pBuffer = str_ptr as *const u8;
         let sString = std::slice::from_raw_parts(pBuffer, len);
         let mut dwModuleHash = 0u32;
 

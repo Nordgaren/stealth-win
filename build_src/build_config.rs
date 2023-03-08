@@ -8,7 +8,7 @@ const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
 
-static AES_STRINGS: [&str; 17] = [
+static AES_STRINGS: [&str; 18] = [
     "VirtualAlloc",
     "VirtualAllocEx",
     "VirtualProtect",
@@ -20,16 +20,16 @@ static AES_STRINGS: [&str; 17] = [
     "CreateToolhelp32Snapshot",
     "Process32First",
     "Process32Next",
-    "GetProcessAddress",
+    "GetProcAddress",
     "CloseHandle",
     "GetLastError",
     "ReflectiveLoader",
     "MessageBoxA",
-    //"NtFlushInstructionCache",
+    "NtFlushInstructionCache",
     "USER32.dll",
 ];
 
-static XOR_STRINGS: [&str; 15] = [
+static XOR_STRINGS: [&str; 14] = [
     "LoadLibraryA",
     "CryptAcquireContextW",
     "CryptCreateHash",
@@ -44,7 +44,7 @@ static XOR_STRINGS: [&str; 15] = [
     "ADVAPI32.dll",
     "KERNEL32.DLL",
     "NTDLL.dll",
-    "NtFlushInstructionCache",
+    //"NtFlushInstructionCache",
 
 ];
 
