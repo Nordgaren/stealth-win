@@ -1,5 +1,3 @@
-use windows_sys::core::PCWSTR;
-
 
 use rand;
 use rand::seq::SliceRandom;
@@ -7,8 +5,7 @@ use rand::Rng;
 use std::fs;
 use std::ops::Range;
 use std::path::Path;
-use loader::{hash, hash_case_insensitive};
-
+use crate::hash::*;
 
 include!("build_config.rs");
 include!("build_util.rs");
@@ -295,6 +292,11 @@ impl ResourceGenerator {
             self.shellcode.len()
         ));
 
+        consts.push(format!(
+            "pub const HASH_KEY: u32 = {:#X};",
+            HASH_KEY
+        ));
+
         for string in &self.aes_strings {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
@@ -399,7 +401,6 @@ impl ResourceGenerator {
         for function in functions {
             function(self, &mut payload)
         }
-
 
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
         payload.extend(bytes);

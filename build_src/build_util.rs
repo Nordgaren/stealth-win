@@ -1,4 +1,5 @@
 use std::ptr::addr_of_mut;
+use windows_sys::core::PCWSTR;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Security::Cryptography::{ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256, ALG_SID_SHA_256, ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, CryptAcquireContextW, CryptCreateHash, CryptDecrypt, CryptDeriveKey, CryptDestroyHash, CryptDestroyKey, CryptEncrypt, CryptGenKey, CryptGetKeyParam, CryptHashData, CryptReleaseContext, CryptSetKeyParam, KP_BLOCKLEN, KP_IV, KP_KEYLEN, PROV_RSA_AES};
 

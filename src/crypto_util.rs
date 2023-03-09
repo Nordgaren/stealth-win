@@ -79,48 +79,50 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
     }
 }
 
-pub unsafe fn aes_decrypt_bytes(bytes: &mut Vec<u8>, key: &[u8], iv: &[u8]) {
-    let mut hProv = 0;
-    if !CryptAcquireContextW(
-        addr_of_mut!(hProv),
-        0,
-        0 as *const u16,
-        PROV_RSA_AES,
-        CRYPT_VERIFYCONTEXT,
-    ) {
-        panic!();
-    }
+pub fn aes_decrypt_bytes(bytes: &mut Vec<u8>, key: &[u8], iv: &[u8]) {
+    unsafe {
+        let mut hProv = 0;
+        if !CryptAcquireContextW(
+            addr_of_mut!(hProv),
+            0,
+            0 as *const u16,
+            PROV_RSA_AES,
+            CRYPT_VERIFYCONTEXT,
+        ) {
+            panic!();
+        }
 
-    let mut hHash = 0;
-    if !CryptCreateHash(hProv, CALG_SHA_256, 0, 0, addr_of_mut!(hHash)) {
-        panic!();
-    }
+        let mut hHash = 0;
+        if !CryptCreateHash(hProv, CALG_SHA_256, 0, 0, addr_of_mut!(hHash)) {
+            panic!();
+        }
 
-    if !CryptHashData(hHash, key.as_ptr(), key.len() as u32, 0) {
-        panic!();
-    }
+        if !CryptHashData(hHash, key.as_ptr(), key.len() as u32, 0) {
+            panic!();
+        }
 
-    let mut hKey = 0;
-    if !CryptDeriveKey(hProv, CALG_AES_256, hHash, 0, addr_of_mut!(hKey)) {
-        panic!();
-    }
+        let mut hKey = 0;
+        if !CryptDeriveKey(hProv, CALG_AES_256, hHash, 0, addr_of_mut!(hKey)) {
+            panic!();
+        }
 
-    if !CryptSetKeyParam(hKey, KP_IV, iv.as_ptr(), 0) {
-        panic!();
-    }
+        if !CryptSetKeyParam(hKey, KP_IV, iv.as_ptr(), 0) {
+            panic!();
+        }
 
-    let mut len = bytes.len() as u32;
-    if !CryptDecrypt(hKey, 0, 0, 0, bytes.as_mut_ptr(), addr_of_mut!(len)) {
-        panic!();
-    }
+        let mut len = bytes.len() as u32;
+        if !CryptDecrypt(hKey, 0, 0, 0, bytes.as_mut_ptr(), addr_of_mut!(len)) {
+            panic!();
+        }
 
-    CryptReleaseContext(hProv, 0);
-    CryptDestroyHash(hHash);
-    CryptDestroyKey(hKey);
+        CryptReleaseContext(hProv, 0);
+        CryptDestroyHash(hHash);
+        CryptDestroyKey(hKey);
 
-    let pad = get_padding(&bytes[..]);
-    if pad > 0 {
-        bytes.truncate(bytes.len() - pad);
+        let pad = get_padding(&bytes[..]);
+        if pad > 0 {
+            bytes.truncate(bytes.len() - pad);
+        }
     }
 }
 

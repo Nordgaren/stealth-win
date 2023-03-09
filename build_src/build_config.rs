@@ -8,6 +8,9 @@ const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
 
+//This is the key that the hashing algorithm will use to hash DLL and function names.
+const HASH_KEY: u32 = 13;
+
 static AES_STRINGS: [&str; 18] = [
     "VirtualAlloc",
     "VirtualAllocEx",

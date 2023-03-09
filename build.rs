@@ -2,8 +2,10 @@ use std::env;
 use winresource::WindowsResource;
 
 include!("build_src/resource_gen.rs");
-#[path = "src//hash.rs"]
-mod loader;
+#[path = "src/hash.rs"]
+mod hash;
+#[path = "src/consts.rs"]
+mod consts;
 
 fn main() {
     let mut gen = ResourceGenerator::new();

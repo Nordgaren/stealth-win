@@ -1,18 +1,18 @@
 #![allow(non_snake_case)]
 
-const HASH_KEY: u32 = 13;
+use crate::consts::HASH_KEY;
 
 #[inline(always)]
 pub fn hash(str_ptr: usize) -> u32 {
     unsafe {
         let mut pBuffer = str_ptr as *const u8;
         let mut dwModuleHash = 0u32;
+
         while *pBuffer != 0 {
             dwModuleHash = dwModuleHash.rotate_right(HASH_KEY);
             dwModuleHash += *pBuffer as u32;
             pBuffer = (pBuffer as usize + 1) as *const u8;
         }
-
         dwModuleHash
     }
 }
