@@ -127,25 +127,21 @@ pub fn aes_decrypt_bytes(bytes: &mut Vec<u8>, key: &[u8], iv: &[u8]) {
 }
 
 pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
-    unsafe {
         let mut resource = get_resource_bytes(RESOURCE_ID, offset, len);
         let key = get_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
         let iv = get_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
         aes_decrypt_bytes(&mut resource, key.as_slice(), iv.as_slice());
 
         resource
-    }
 }
 
 pub fn get_aes_encrypted_resource_bytes_unmapped(offset: usize, len: usize) -> Vec<u8> {
-    unsafe {
         let mut resource = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
         let key = get_unmapped_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
         let iv = get_unmapped_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
         aes_decrypt_bytes(&mut resource, key.as_slice(), iv.as_slice());
 
         resource
-    }
 }
 
 pub fn get_xor_encrypted_string(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
