@@ -47,8 +47,7 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
 
     let mut pListEntry = pStartListEntry as *const LIST_ENTRY;
     while pListEntry != pModuleList {
-        let pEntry =
-            ((pListEntry as usize) - size_of::<LIST_ENTRY>()) as *const LDR_DATA_TABLE_ENTRY;
+        let pEntry = (pListEntry as usize - size_of::<LIST_ENTRY>()) as *const LDR_DATA_TABLE_ENTRY;
 
         // Debug code for printing out module names.
         // let buff = std::slice::from_raw_parts(

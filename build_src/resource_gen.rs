@@ -123,8 +123,8 @@ impl ResourceGenerator {
 
             //also generate the hash, if it's needed
             let hash = if string_name.ends_with(".dll") || string_name.ends_with(".DLL") {
-                let wString = string_name.encode_utf16().collect::<Vec<u16>>();
-                hash_case_insensitive(wString.as_ptr() as usize, string_name.len() * 2)
+                let w_string = string_name.encode_utf16().collect::<Vec<u16>>();
+                hash_case_insensitive(w_string.as_ptr() as usize, string_name.len() * 2)
             } else {
                 let mut c_string = string_name.to_string();
                 c_string.push(0 as char);
@@ -384,25 +384,22 @@ impl ResourceGenerator {
             ResourceGenerator::add_target_to_payload,
         ];
 
-        let mut i = self.aes_strings.len();
-        while i > 0 {
+        for _ in &self.aes_strings {
             functions.push(ResourceGenerator::add_aes_string_to_payload);
             functions.push(ResourceGenerator::add_aes_hash_to_payload);
-            i -= 1;
         }
 
-        let mut i = self.xor_strings.len();
-        while i > 0 {
+        for _ in &self.xor_strings {
             functions.push(ResourceGenerator::add_xor_string_to_payload);
             functions.push(ResourceGenerator::add_xor_hash_to_payload);
-            i -= 1;
         }
 
         functions.shuffle(&mut rand::thread_rng());
         let mut payload = vec![];
-        while !functions.is_empty() {
-            (functions.pop().unwrap())(self, &mut payload)
+        for function in functions {
+            function(self, &mut payload)
         }
+
 
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
         payload.extend(bytes);

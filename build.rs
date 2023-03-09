@@ -1,3 +1,4 @@
+use std::env;
 use winresource::WindowsResource;
 
 include!("build_src/resource_gen.rs");
@@ -34,7 +35,7 @@ fn build_pe_resources_file() {
 }
 
 fn embed_pe_resource_file() {
-    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
+    if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
         let mut res = WindowsResource::new();
         res.set_resource_file("rsrc/resources.rc");
         res.compile().expect("Could not compile pe resource.");

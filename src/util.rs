@@ -3,7 +3,7 @@
 use crate::consts::*;
 use crate::winternals::*;
 use std::arch::global_asm;
-use std::fs;
+//use std::fs;
 use std::mem::size_of;
 
 pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
