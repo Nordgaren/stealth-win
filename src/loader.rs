@@ -6,12 +6,12 @@ use crate::crypto_util::{
     get_xor_encrypted_string, get_xor_encrypted_string_unmapped,
 };
 use crate::hash::{hash, hash_case_insensitive};
-use crate::util::{get_dll_base, get_resource_bytes, get_unmapped_resource_bytes};
-use crate::winapi::get_peb;
-use crate::winternals::*;
+use crate::util::{get_dll_base, get_resource_bytes, get_unmapped_resource_bytes, hi_word, low_word};
 use std::mem::size_of;
 use std::ptr::addr_of;
 use std::{fs, mem};
+use crate::windows::kernel32::{get_peb, GetProcAddress, LoadLibraryA, MEM_COMMIT, MEM_RESERVE, NtFlushInstructionCache, PAGE_EXECUTE_READWRITE, VirtualAlloc};
+use crate::windows::ntdll::{DLL_PROCESS_ATTACH, DllMain, IMAGE_BASE_RELOCATION, IMAGE_DIRECTORY_ENTRY_BASERELOC, IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_DIRECTORY_ENTRY_IMPORT, IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY, IMAGE_IMPORT_BY_NAME, IMAGE_IMPORT_DESCRIPTOR, IMAGE_NT_HEADERS, IMAGE_ORDINAL_FLAG, IMAGE_REL_BASED_DIR64, IMAGE_REL_BASED_HIGH, IMAGE_REL_BASED_HIGHLOW, IMAGE_REL_BASED_LOW, IMAGE_RELOC, IMAGE_SECTION_HEADER, TRUNC_LDR_DATA_TABLE_ENTRY};
 
 const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
 const NTDLLDLL_HASH: u32 = 0x3CFA685D;
@@ -437,15 +437,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     return pDllMainAddr;
 }
 
-#[inline(always)]
-fn low_word(n: usize) -> u16 {
-    (n & 0xFFFF) as u16
-}
 
-#[inline(always)]
-fn hi_word(n: usize) -> u16 {
-    ((n >> 16) & 0xFFFF) as u16
-}
 
 #[inline(always)]
 fn get_offset(bitfield: u16) -> usize {

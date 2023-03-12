@@ -291,6 +291,7 @@ fn generate_random_bytes(i: usize) -> Vec<u8> {
     (0..i).map(|_| rand::thread_rng().gen()).collect()
 }
 
+#[allow(unused)]
 fn generate_random_bytes_in_range(i: usize, r: Range<u8>) -> Vec<u8> {
     (0..i)
         .map(|_| rand::thread_rng().gen_range(r.start..r.end))

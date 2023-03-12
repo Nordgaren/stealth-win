@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
+#![allow(unused)]
 
 use crate::consts::*;
 use crate::util::{get_resource_bytes, get_unmapped_resource_bytes};
-use crate::winapi::*;
-use crate::winternals::*;
 use std::ptr::addr_of_mut;
+use crate::windows::advapi::*;
 
 fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
     unsafe {

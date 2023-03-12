@@ -1,10 +1,12 @@
 #![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+#![allow(unused)]
 
 use crate::consts::*;
-use crate::winternals::*;
 use std::arch::global_asm;
 //use std::fs;
 use std::mem::size_of;
+use crate::windows::ntdll::{IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS, IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY, RESOURCE_DIRECTORY_TABLE};
 
 pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
     let mut pos = ptr as usize;
@@ -73,16 +75,13 @@ unsafe fn get_resource_data_entry(
     resource_id: u32,
 ) -> *const RESOURCE_DATA_ENTRY {
     //level 1: Resource type directory
-    let pResourceEntries = pResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let mut offset = get_id_entry_offset(pResourceDirAddr, pResourceEntries, RT_RCDATA as u32);
+    let mut offset = get_entry_offset_by_id(pResourceDirAddr, RT_RCDATA as u32);
     offset &= 0x7FFFFFFF;
 
     //level 2: Resource Name/ID subdirectory
     let pDataResourceDirAddr =
         (pResourceDirAddr as usize + offset as usize) as *const RESOURCE_DIRECTORY_TABLE;
-    let pDataResourceEntries =
-        pDataResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let mut offset = get_id_entry_offset(pDataResourceDirAddr, pDataResourceEntries, resource_id);
+    let mut offset = get_entry_offset_by_id(pDataResourceDirAddr, resource_id);
     offset &= 0x7FFFFFFF;
 
     //level 3: language subdirectory - just use the first entry.
@@ -96,19 +95,38 @@ unsafe fn get_resource_data_entry(
     (pResourceDirAddr as usize + offset as usize) as *const RESOURCE_DATA_ENTRY
 }
 
-unsafe fn get_id_entry_offset(
+unsafe fn get_entry_offset_by_id(
     pResourceDirAddr: *const RESOURCE_DIRECTORY_TABLE,
-    pResourceEntries: usize,
     id: u32,
 ) -> u32 {
-    for i in (*pResourceDirAddr).NumberOfNameEntries
-        ..(*pResourceDirAddr).NumberOfNameEntries + (*pResourceDirAddr).NumberOfIDEntries
-    {
-        let pResourceEntry = (pResourceEntries
-            + i as usize * size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>())
-            as *const IMAGE_RESOURCE_DIRECTORY_ENTRY;
-        if (*pResourceEntry).Name == id {
-            return (*pResourceEntry).OffsetToData;
+    let pResourceEntries = pResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
+    let sResourceDirectoryEntries: &[IMAGE_RESOURCE_DIRECTORY_ENTRY] = std::slice::from_raw_parts(
+        pResourceEntries as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
+        ((*pResourceDirAddr).NumberOfNameEntries + (*pResourceDirAddr).NumberOfIDEntries) as usize,
+    );
+
+    for i in (*pResourceDirAddr).NumberOfNameEntries as usize..sResourceDirectoryEntries.len() {
+        if sResourceDirectoryEntries[i].Name == id {
+            return sResourceDirectoryEntries[i].OffsetToData;
+        }
+    }
+
+    0
+}
+
+unsafe fn get_entry_offset_by_name(
+    pResourceDirAddr: *const RESOURCE_DIRECTORY_TABLE,
+    id: u32,
+) -> u32 {
+    let pResourceEntries = pResourceDirAddr as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
+    let sResourceDirectoryEntries: &[IMAGE_RESOURCE_DIRECTORY_ENTRY] = std::slice::from_raw_parts(
+        pResourceEntries as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
+        ((*pResourceDirAddr).NumberOfNameEntries + (*pResourceDirAddr).NumberOfIDEntries) as usize,
+    );
+
+    for i in 0..(*pResourceDirAddr).NumberOfNameEntries as usize {
+        if sResourceDirectoryEntries[i].Name == id {
+            return sResourceDirectoryEntries[i].OffsetToData;
         }
     }
 
@@ -164,25 +182,6 @@ _get_return:
     ret",
 );
 
-// pub unsafe fn get_return() -> usize {
-//     let mut ret_addr = 0usize;
-//     if cfg!(all(windows, target_arch = "x86_64")) {
-//         asm!(
-//         "lea {ret_addr}, [rip]",
-//         ret_addr = out(reg) ret_addr,
-//         );
-//     } else if cfg!(all(windows, target_arch = "x86")) {
-//         asm!(
-//         "mov {ret_addr}, [esp + 4]",
-//         ret_addr = out(reg) ret_addr,
-//         );
-//     } else if cfg!(all(windows, target_arch = "aarch64")) {
-//         todo!()
-//     };
-//
-//     ret_addr
-// }
-
 unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, dwRVA: u32) -> u32 {
     let pSectionHeaders =
         (pNtHeaders as usize + size_of::<IMAGE_NT_HEADERS>()) as *const IMAGE_SECTION_HEADER;
@@ -204,4 +203,24 @@ unsafe fn rva_to_foa(pNtHeaders: *const IMAGE_NT_HEADERS, dwRVA: u32) -> u32 {
     }
 
     return 0;
+}
+
+#[inline(always)]
+pub(crate) fn low_word(n: usize) -> u16 {
+    (n & 0xFFFF) as u16
+}
+
+#[inline(always)]
+pub(crate) fn hi_word(n: usize) -> u16 {
+    ((n >> 16) & 0xFFFF) as u16
+}
+
+#[inline(always)]
+pub(crate) fn low_byte(n: usize) -> u8 {
+    (n & 0xFF) as u8
+}
+
+#[inline(always)]
+pub(crate) fn hi_byte(n: usize) -> u8 {
+    ((n >> 8) & 0xFF) as u8
 }
