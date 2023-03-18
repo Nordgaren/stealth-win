@@ -28,7 +28,7 @@ pub type CryptHashData = unsafe extern "system" fn(
     dwFlags: u32,
 ) -> bool;
 pub type CryptSetKeyParam =
-unsafe extern "system" fn(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool;
+    unsafe extern "system" fn(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool;
 pub type CryptGetKeyParam = unsafe extern "system" fn(
     hKey: usize,
     dwParam: u32,
@@ -82,7 +82,6 @@ pub const KP_KEYLEN: u32 = 9u32;
 pub const PROV_RSA_AES: u32 = 24;
 pub const CRYPT_VERIFYCONTEXT: u32 = 0xF0000000;
 
-
 pub unsafe fn CryptAcquireContextW(
     phProv: *mut usize,
     szContainer: usize,
@@ -101,7 +100,7 @@ pub unsafe fn CryptAcquireContextW(
             CRYPTACQUIRECONTEXTW_KEY,
             CRYPTACQUIRECONTEXTW_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)
@@ -125,7 +124,7 @@ pub unsafe fn CryptCreateHash(
             CRYPTCREATEHASH_KEY,
             CRYPTCREATEHASH_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptCreateHash(phProv, ALG_ID, hKey, dwFlags, phHash)
@@ -177,7 +176,7 @@ pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwF
             CRYPTSETKEYPARAM_KEY,
             CRYPTSETKEYPARAM_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)
@@ -201,7 +200,7 @@ pub unsafe fn CryptGetKeyParam(
             CRYPTGETKEYPARAM_KEY,
             CRYPTGETKEYPARAM_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptGetKeyParam(hKey, dwParam, pbData, pbDataLen, dwFlags)
@@ -260,7 +259,7 @@ pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
             CRYPTRELEASECONTEXT_KEY,
             CRYPTRELEASECONTEXT_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptReleaseContext(hProv, dwFlags)
@@ -278,7 +277,7 @@ pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
             CRYPTDESTROYKEY_KEY,
             CRYPTDESTROYKEY_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptDestroyKey(hKey)
@@ -296,7 +295,7 @@ pub unsafe fn CryptDestroyHash(hHash: usize) -> bool {
             CRYPTDESTROYHASH_KEY,
             CRYPTDESTROYHASH_LEN,
         )
-            .as_slice(),
+        .as_slice(),
     ));
 
     cryptDestroyHash(hHash)

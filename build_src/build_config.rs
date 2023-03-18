@@ -11,7 +11,7 @@ const RANGE_END: usize = 0x100;
 //This is the key that the hashing algorithm will use to hash DLL and function names.
 const HASH_KEY: u32 = 13;
 
-static AES_STRINGS: [&str; 18] = [
+static AES_STRINGS: [&str; 19] = [
     "VirtualAlloc",
     "VirtualAllocEx",
     "VirtualProtect",
@@ -30,6 +30,7 @@ static AES_STRINGS: [&str; 18] = [
     "MessageBoxA",
     "NtFlushInstructionCache",
     "USER32.dll",
+    "GetCurrentProcess",
 ];
 
 static XOR_STRINGS: [&str; 14] = [

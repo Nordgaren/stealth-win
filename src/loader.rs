@@ -6,12 +6,23 @@ use crate::crypto_util::{
     get_xor_encrypted_string, get_xor_encrypted_string_unmapped,
 };
 use crate::hash::{hash, hash_case_insensitive};
-use crate::util::{get_dll_base, get_resource_bytes, get_unmapped_resource_bytes, hi_word, low_word};
+use crate::util::{
+    get_dll_base, get_resource_bytes, get_unmapped_resource_bytes, hi_word, low_word,
+};
+use crate::windows::kernel32::{
+    get_peb, GetProcAddress, LoadLibraryA, NtFlushInstructionCache, VirtualAlloc, MEM_COMMIT,
+    MEM_RESERVE, PAGE_EXECUTE_READWRITE,
+};
+use crate::windows::ntdll::{
+    DllMain, DLL_PROCESS_ATTACH, IMAGE_BASE_RELOCATION, IMAGE_DIRECTORY_ENTRY_BASERELOC,
+    IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_DIRECTORY_ENTRY_IMPORT, IMAGE_DOS_HEADER,
+    IMAGE_EXPORT_DIRECTORY, IMAGE_IMPORT_BY_NAME, IMAGE_IMPORT_DESCRIPTOR, IMAGE_NT_HEADERS,
+    IMAGE_ORDINAL_FLAG, IMAGE_RELOC, IMAGE_REL_BASED_DIR64, IMAGE_REL_BASED_HIGH,
+    IMAGE_REL_BASED_HIGHLOW, IMAGE_REL_BASED_LOW, IMAGE_SECTION_HEADER, TRUNC_LDR_DATA_TABLE_ENTRY,
+};
 use std::mem::size_of;
 use std::ptr::addr_of;
 use std::{fs, mem};
-use crate::windows::kernel32::{get_peb, GetProcAddress, LoadLibraryA, MEM_COMMIT, MEM_RESERVE, NtFlushInstructionCache, PAGE_EXECUTE_READWRITE, VirtualAlloc};
-use crate::windows::ntdll::{DLL_PROCESS_ATTACH, DllMain, IMAGE_BASE_RELOCATION, IMAGE_DIRECTORY_ENTRY_BASERELOC, IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_DIRECTORY_ENTRY_IMPORT, IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY, IMAGE_IMPORT_BY_NAME, IMAGE_IMPORT_DESCRIPTOR, IMAGE_NT_HEADERS, IMAGE_ORDINAL_FLAG, IMAGE_REL_BASED_DIR64, IMAGE_REL_BASED_HIGH, IMAGE_REL_BASED_HIGHLOW, IMAGE_REL_BASED_LOW, IMAGE_RELOC, IMAGE_SECTION_HEADER, TRUNC_LDR_DATA_TABLE_ENTRY};
 
 const KERNEL32DLL_HASH: u32 = 0x6A4ABC5B;
 const NTDLLDLL_HASH: u32 = 0x3CFA685D;
@@ -302,7 +313,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         &(*pNtHeaders).OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
     // we assume their is an import table to process
-    // uiValueC is the first entry in the import table
+    // pImageImportDescriptor is the first entry in the import table
     let pImageImportDescriptor = (pBaseAddress + pImageDataDirectory.VirtualAddress as usize)
         as *const IMAGE_IMPORT_DESCRIPTOR;
     // The size of the data directory always includes and extra blank entry, so we divide by the size of the struct and subtract 1 to get the length of the data directory.
@@ -315,11 +326,11 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         let pTargetLibraryAddress =
             fnLoadLibraryA((pBaseAddress + sImageImportDescriptor.Name as usize) as *const u8);
 
-        // uiValueD = VA of the OriginalFirstThunk
+        // pOriginalFirstThunk = VA of the OriginalFirstThunk
         let mut pOriginalFirstThunk =
             (pBaseAddress + sImageImportDescriptor.OriginalFirstThunk as usize) as *const usize;
 
-        // uiValueA = VA of the IAT (via first thunk not origionalfirstthunk)
+        // pImportAddressTable = VA of the IAT (via first thunk not origionalfirstthunk)
         let mut pImportAddressTable =
             (pBaseAddress + sImageImportDescriptor.FirstThunk as usize) as *mut usize;
 
@@ -380,44 +391,44 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // check if their are any relocations present
     if (*pBaseRelocDirectory).Size != 0 {
         // uiValueC is now the first entry (IMAGE_BASE_RELOCATION)
-        let mut uiValueC = (pBaseAddress + (*pBaseRelocDirectory).VirtualAddress as usize)
+        let mut pImageBaseRelocation = (pBaseAddress + (*pBaseRelocDirectory).VirtualAddress as usize)
             as *const IMAGE_BASE_RELOCATION;
 
         // and we itterate through all entries...
-        while (*uiValueC).SizeOfBlock != 0 {
-            // uiValueA = the VA for this relocation block
-            let uiValueA = pBaseAddress + (*uiValueC).VirtualAddress as usize;
+        while (*pImageBaseRelocation).SizeOfBlock != 0 {
+            // pRelocationBlock = the VA for this relocation block
+            let pRelocationBlock = pBaseAddress + (*pImageBaseRelocation).VirtualAddress as usize;
 
-            // uiValueB = number of entries in this relocation block
-            let uiValueB = ((*uiValueC).SizeOfBlock as usize - size_of::<IMAGE_BASE_RELOCATION>())
+            // count = number of entries in this relocation block
+            let count = ((*pImageBaseRelocation).SizeOfBlock as usize - size_of::<IMAGE_BASE_RELOCATION>())
                 / size_of::<IMAGE_RELOC>();
 
-            // uiValueD is now the first entry in the current relocation block
-            let uiValueD =
-                (uiValueC as usize + size_of::<IMAGE_BASE_RELOCATION>()) as *const IMAGE_RELOC;
+            // pImageRelocs is now the first entry in the current relocation block
+            let pImageRelocs =
+                (pImageBaseRelocation as usize + size_of::<IMAGE_BASE_RELOCATION>()) as *const IMAGE_RELOC;
 
-            // we itterate through all the entries in the current block...
+            // we iterate through all the entries in the current block...
             // and since it's rust, we do it via a slice, because that's the way to go, if we can!
-            let sImageRelocs = std::slice::from_raw_parts(uiValueD, uiValueB);
+            let sImageRelocs = std::slice::from_raw_parts(pImageRelocs, count);
             for sImageReloc in sImageRelocs {
                 // perform the relocation, skipping IMAGE_REL_BASED_ABSOLUTE as required.
                 // we dont use a switch statement to avoid the compiler building a jump table
                 // which would not be very position independent!
                 if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_DIR64 {
-                    let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut usize;
+                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut usize;
                     *pRelocAddr = (*pRelocAddr).wrapping_add(szBaseAddressDelta);
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_HIGHLOW {
-                    let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut u32;
+                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u32;
                     *pRelocAddr = (*pRelocAddr).wrapping_add(szBaseAddressDelta as u32)
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_HIGH {
-                    let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut u16;
+                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u16;
                     *pRelocAddr += (*pRelocAddr).wrapping_add(hi_word(szBaseAddressDelta));
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_LOW {
-                    let pRelocAddr = (uiValueA + get_offset(sImageReloc.bitfield)) as *mut u16;
+                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u16;
                     *pRelocAddr += (*pRelocAddr).wrapping_add(low_word(szBaseAddressDelta));
                 }
             }
-            uiValueC = (uiValueC as usize + (*uiValueC).SizeOfBlock as usize)
+            pImageBaseRelocation = (pImageBaseRelocation as usize + (*pImageBaseRelocation).SizeOfBlock as usize)
                 as *const IMAGE_BASE_RELOCATION;
         }
     }
@@ -436,8 +447,6 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // STEP 7: return our new entry point address so whatever called us can call DllMain() if needed.
     return pDllMainAddr;
 }
-
-
 
 #[inline(always)]
 fn get_offset(bitfield: u16) -> usize {

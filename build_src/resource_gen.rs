@@ -1,4 +1,4 @@
-
+use std::collections::HashMap;
 use rand;
 use rand::seq::SliceRandom;
 use rand::Rng;

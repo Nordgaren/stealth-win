@@ -4,9 +4,15 @@
 
 use crate::consts::*;
 use std::arch::global_asm;
+use std::mem;
 //use std::fs;
+use crate::windows::ntdll::{
+    IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
+    IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY,
+    RESOURCE_DIRECTORY_TABLE,
+};
 use std::mem::size_of;
-use crate::windows::ntdll::{IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS, IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY, RESOURCE_DIRECTORY_TABLE};
+use std::ptr::addr_of_mut;
 
 pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
     let mut pos = ptr as usize;
@@ -51,10 +57,6 @@ unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
 
 unsafe fn get_unmapped_resource(resource_id: u32) -> &'static [u8] {
     let pBaseAddr = get_dll_base();
-    // let pBaseAddr = fs::read(
-    //     r"C:\Users\Nord\source\Hacking\Sektor7\RTO-MDI\03.Assignment\reflective-dll\target\debug\dyload.dll",
-    // ).unwrap();
-    // let pBaseAddr = pBaseAddr.as_ptr() as usize;
     let pDosHdr = pBaseAddr as *const IMAGE_DOS_HEADER;
     let pNTHdrs = (pBaseAddr + (*pDosHdr).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
     let pOptionalHdr = &(*pNTHdrs).OptionalHeader;
@@ -223,4 +225,18 @@ pub(crate) fn low_byte(n: usize) -> u8 {
 #[inline(always)]
 pub(crate) fn hi_byte(n: usize) -> u8 {
     ((n >> 8) & 0xFF) as u8
+}
+
+#[cfg(test)]
+pub(crate) unsafe fn print_buffer_as_string(string_ptr: *const u8, len: usize) {
+    let buff = std::slice::from_raw_parts(string_ptr, len);
+    let str = String::from_utf8(buff.to_vec()).unwrap();
+    println!("{}", str);
+}
+
+#[cfg(test)]
+pub(crate) unsafe fn print_buffer_as_string_utf16(string_ptr: *const u16, len: usize) {
+    let buff = std::slice::from_raw_parts(string_ptr, len);
+    let str = String::from_utf16(buff).unwrap();
+    println!("{}", str);
 }

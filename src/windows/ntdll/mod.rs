@@ -3,7 +3,7 @@
 #![allow(unused)]
 
 pub type DllMain =
-extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
+    extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
 
 #[repr(C)]
 pub struct IMAGE_IMPORT_BY_NAME {
@@ -188,7 +188,7 @@ pub struct PEB {
     pub KernelCallbackTable: usize,
     pub SystemReserved: u32,
     pub AtlThunkSListPtr32: u32,
-    pub ApiSetMap: usize,
+    pub ApiSetMap: *const u32,
 }
 
 #[repr(C)]

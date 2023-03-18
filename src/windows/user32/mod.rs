@@ -46,7 +46,6 @@ pub const MB_TOPMOST: u32 = 0x00040000;
 pub const MB_RIGHT: u32 = 0x00080000;
 pub const MB_RTLREADING: u32 = 0x00100000;
 
-
 pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, uType: u32) -> u32 {
     let messageBoxA: MessageBoxA = std::mem::transmute(GetProcAddress(
         GetModuleHandle(get_aes_encrypted_resource_bytes(
@@ -58,4 +57,3 @@ pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, 
 
     messageBoxA(hWnd, lpText, lpCaption, uType)
 }
-
