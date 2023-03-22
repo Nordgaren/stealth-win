@@ -4,7 +4,9 @@
 
 use crate::consts::*;
 use crate::crypto_util::*;
-use crate::util::{print_buffer_as_string, print_buffer_as_string_utf16, str_len};
+use crate::util::str_len;
+#[cfg(test)]
+use crate::util::{print_buffer_as_string, print_buffer_as_string_utf16};
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
 use std::arch::asm;
