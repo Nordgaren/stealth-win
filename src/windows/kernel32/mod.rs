@@ -4,17 +4,16 @@
 
 use crate::consts::*;
 use crate::crypto_util::*;
-use crate::util::str_len;
 #[cfg(test)]
 use crate::util::{print_buffer_as_string, print_buffer_as_string_utf16};
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
-use std::arch::asm;
+use std::arch::global_asm;
 use std::ffi::{c_char, CStr, CString};
 use std::mem::size_of;
 use std::ptr::addr_of;
-use std::{mem, slice};
 use std::str::Utf8Error;
+use std::{mem, slice};
 
 //KERNEL32.DLL
 pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
@@ -142,35 +141,36 @@ pub struct PROCESSENTRY32 {
     pub szExeFile: [u8; MAX_PATH],
 }
 
-pub unsafe fn get_peb() -> *const PEB {
-    let mut peb = 0usize;
-    if cfg!(all(windows, target_arch = "x86_64")) {
-        asm!(
-        "mov {peb}, gs:0x60",
-        peb = out(reg) peb,
-        );
-    } else if cfg!(all(windows, target_arch = "x86")) {
-        asm!(
-        "mov {peb}, fs:0x30",
-        peb = out(reg) peb,
-        );
-    } else if cfg!(all(windows, target_arch = "aarch64")) {
-        // asm!(
-        // peb = out(reg) peb,
-        // );
-    };
-
-    peb as *const PEB
+extern "C" {
+    pub fn get_peb() -> &'static PEB;
 }
+
+#[cfg(all(windows, target_arch = "x86_64"))]
+global_asm!(
+    r"
+.global get_peb
+get_peb:
+    mov rax, gs:0x60
+    ret",
+);
+
+#[cfg(all(windows, target_arch = "x86"))]
+global_asm!(
+    r"
+.global get_peb
+_get_peb:
+    mov eax, fs:0x30
+    ret",
+);
 
 pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
     let peb = get_peb();
 
     if sModuleName.is_empty() {
-        return (*peb).ImageBaseAddress;
+        return peb.ImageBaseAddress;
     }
 
-    let Ldr = (*peb).Ldr;
+    let Ldr = peb.Ldr;
     let pModuleList = addr_of!((*Ldr).InMemoryOrderModuleList);
     let pStartListEntry = (*pModuleList).Flink;
     let sModuleNameW = String::from_utf8(sModuleName)
@@ -235,16 +235,15 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
             std::slice::from_raw_parts(pFuncNameTbl, (*pExportDirAddr).NumberOfNames as usize);
 
         for i in 0..(*pExportDirAddr).NumberOfNames as usize {
-            let string_ptr = (pBaseAddr + pFuncNameTblArray[i] as usize) as *const u8;
+            let string_ptr = pBaseAddr + pFuncNameTblArray[i] as usize;
 
-            let len = str_len(string_ptr, MAX_PATH);
-
+            let c_string = CStr::from_ptr(string_ptr as *const c_char);
             // Debug code for printing out module names.
             // if cfg!(test) {
-            //     print_buffer_as_string(string_ptr, len);
+            //     println!("{:?}", c_string);
             // }
 
-            if sProcName == std::slice::from_raw_parts(string_ptr, len) {
+            if sProcName == c_string.to_bytes() {
                 let pHintsTblArray =
                     std::slice::from_raw_parts(pHintsTbl, (*pExportDirAddr).NumberOfNames as usize);
                 pProcAddr = pBaseAddr + pEATArray[pHintsTblArray[i] as usize] as usize;
@@ -260,7 +259,7 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
             Err(_) => return 0,
         };
         let split_pos = match sFwdDll.find(".") {
-            Some(s) => s + 1,
+            Some(s) => s,
             None => return 0,
         };
         sFwdDll = sFwdDll.replace(".", "\0");
@@ -270,7 +269,7 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
             return 0;
         }
 
-        let sFwdFunction = CStr::from_ptr((pProcAddr + split_pos) as *const c_char);
+        let sFwdFunction = CStr::from_ptr((pProcAddr + split_pos + 1) as *const c_char);
         pProcAddr = GetProcAddress(hFwd, sFwdFunction.to_bytes());
     }
 

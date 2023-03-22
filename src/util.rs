@@ -14,17 +14,6 @@ use crate::windows::ntdll::{
 use std::mem::size_of;
 use std::ptr::addr_of_mut;
 
-pub unsafe fn str_len(ptr: *const u8, max: usize) -> usize {
-    let mut pos = ptr as usize;
-    let mut len = 0;
-    while *(pos as *const u8) != 0 && len < max {
-        len += 1;
-        pos += 1;
-    }
-
-    len
-}
-
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
     let resource = unsafe { get_resource(resource_id) };
     let end = offset + len;

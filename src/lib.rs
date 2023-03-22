@@ -70,8 +70,9 @@ mod tests {
     use crate::loader::ReflectiveLoader;
     use crate::util::{get_dll_base, get_resource_bytes, get_return};
     use crate::windows::kernel32::{get_peb, GetModuleHandle, GetProcAddress};
-    use std::ptr::addr_of;
     use crate::windows::ntdll::PEB;
+    use std::mem;
+    use std::ptr::addr_of;
 
     #[test]
     fn get_module_handle() {
@@ -107,7 +108,8 @@ mod tests {
     fn geb_peb() {
         unsafe {
             let peb = get_peb();
-            assert_ne!(peb as usize, 0);
+            let peb_addr: usize = mem::transmute(peb);
+            assert_ne!(peb_addr, 0);
         }
     }
 

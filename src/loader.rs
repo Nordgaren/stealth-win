@@ -391,7 +391,8 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // check if their are any relocations present
     if (*pBaseRelocDirectory).Size != 0 {
         // uiValueC is now the first entry (IMAGE_BASE_RELOCATION)
-        let mut pImageBaseRelocation = (pBaseAddress + (*pBaseRelocDirectory).VirtualAddress as usize)
+        let mut pImageBaseRelocation = (pBaseAddress
+            + (*pBaseRelocDirectory).VirtualAddress as usize)
             as *const IMAGE_BASE_RELOCATION;
 
         // and we itterate through all entries...
@@ -400,12 +401,13 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
             let pRelocationBlock = pBaseAddress + (*pImageBaseRelocation).VirtualAddress as usize;
 
             // count = number of entries in this relocation block
-            let count = ((*pImageBaseRelocation).SizeOfBlock as usize - size_of::<IMAGE_BASE_RELOCATION>())
+            let count = ((*pImageBaseRelocation).SizeOfBlock as usize
+                - size_of::<IMAGE_BASE_RELOCATION>())
                 / size_of::<IMAGE_RELOC>();
 
             // pImageRelocs is now the first entry in the current relocation block
-            let pImageRelocs =
-                (pImageBaseRelocation as usize + size_of::<IMAGE_BASE_RELOCATION>()) as *const IMAGE_RELOC;
+            let pImageRelocs = (pImageBaseRelocation as usize + size_of::<IMAGE_BASE_RELOCATION>())
+                as *const IMAGE_RELOC;
 
             // we iterate through all the entries in the current block...
             // and since it's rust, we do it via a slice, because that's the way to go, if we can!
@@ -415,20 +417,25 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
                 // we dont use a switch statement to avoid the compiler building a jump table
                 // which would not be very position independent!
                 if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_DIR64 {
-                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut usize;
+                    let pRelocAddr =
+                        (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut usize;
                     *pRelocAddr = (*pRelocAddr).wrapping_add(szBaseAddressDelta);
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_HIGHLOW {
-                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u32;
+                    let pRelocAddr =
+                        (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u32;
                     *pRelocAddr = (*pRelocAddr).wrapping_add(szBaseAddressDelta as u32)
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_HIGH {
-                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u16;
+                    let pRelocAddr =
+                        (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u16;
                     *pRelocAddr += (*pRelocAddr).wrapping_add(hi_word(szBaseAddressDelta));
                 } else if get_type(sImageReloc.bitfield) == IMAGE_REL_BASED_LOW {
-                    let pRelocAddr = (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u16;
+                    let pRelocAddr =
+                        (pRelocationBlock + get_offset(sImageReloc.bitfield)) as *mut u16;
                     *pRelocAddr += (*pRelocAddr).wrapping_add(low_word(szBaseAddressDelta));
                 }
             }
-            pImageBaseRelocation = (pImageBaseRelocation as usize + (*pImageBaseRelocation).SizeOfBlock as usize)
+            pImageBaseRelocation = (pImageBaseRelocation as usize
+                + (*pImageBaseRelocation).SizeOfBlock as usize)
                 as *const IMAGE_BASE_RELOCATION;
         }
     }
