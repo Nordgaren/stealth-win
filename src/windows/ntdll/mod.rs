@@ -177,7 +177,7 @@ pub struct PEB {
     pub BitField: u8,
     pub Mutant: usize,
     pub ImageBaseAddress: usize,
-    pub Ldr: *mut PEB_LDR_DATA,
+    pub Ldr: &'static PEB_LDR_DATA,
     pub ProcessParameters: u32,
     pub SubSystemData: usize,
     pub ProcessHeap: usize,

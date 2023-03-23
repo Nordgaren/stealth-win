@@ -11,7 +11,7 @@ use crate::windows::ntdll::*;
 use std::arch::global_asm;
 use std::ffi::{c_char, CStr, CString};
 use std::mem::size_of;
-use std::ptr::addr_of;
+use std::ptr::{addr_of, addr_of_mut};
 use std::str::Utf8Error;
 use std::{mem, slice};
 
@@ -171,7 +171,7 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
     }
 
     let Ldr = peb.Ldr;
-    let pModuleList = addr_of!((*Ldr).InMemoryOrderModuleList);
+    let pModuleList = addr_of!(Ldr.InMemoryOrderModuleList);
     let pStartListEntry = (*pModuleList).Flink;
     let sModuleNameW = String::from_utf8(sModuleName)
         .unwrap()
