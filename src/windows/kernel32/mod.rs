@@ -5,7 +5,6 @@
 use crate::consts::*;
 use crate::crypto_util::*;
 #[cfg(test)]
-use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
 use std::arch::global_asm;
 use std::ffi::{c_char, CStr, CString};
@@ -189,11 +188,11 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
 
         if &sModuleNameW[..]
             == std::slice::from_raw_parts(
-                (*pEntry).BaseDllName.Buffer,
-                ((*pEntry).BaseDllName.Length / 2) as usize,
+                pEntry.BaseDllName.Buffer,
+                (pEntry.BaseDllName.Length / 2) as usize,
             )
         {
-            return (*pEntry).DllBase;
+            return pEntry.DllBase;
         }
         pListEntry = pListEntry.Flink;
     }
