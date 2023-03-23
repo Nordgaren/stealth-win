@@ -162,7 +162,7 @@ _get_peb:
     ret",
 );
 
-pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>, key: &[u8]) -> usize {
+pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
     let peb = get_peb();
 
     if sModuleName.is_empty() {
