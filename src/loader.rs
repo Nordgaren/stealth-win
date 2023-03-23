@@ -47,8 +47,8 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     // STEP 1: process the kernels exports for the functions our loader needs...
     // get the Process Environment Block
     let peb = get_peb();
-    let pLdr = (*peb).Ldr;
-    let mut pModuleList = (*pLdr).InMemoryOrderModuleList.Flink;
+    let pLdr = peb.Ldr;
+    let mut pModuleList = pLdr.InMemoryOrderModuleList.Flink;
 
     // the functions we need
     let mut pLoadLibraryA = 0usize;
@@ -56,13 +56,13 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
     let mut pVirtualAlloc = 0usize;
     let mut pNtFlushInstructionCache = 0usize;
 
-    while pModuleList as usize != 0 {
+    while addr_of!(*pModuleList) as usize != 0 {
         // use a truncated definition of LDR_DATA_TABLE_ENTRY, since we are moving through the InMemoryOrderModuleList
-        let pTruncLdrTableDataEntry = pModuleList as *const TRUNC_LDR_DATA_TABLE_ENTRY;
+        let pTruncLdrTableDataEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pModuleList);
         // get pointer to current modules name (unicode string)
-        let pBuffer = (*pTruncLdrTableDataEntry).BaseDllName.Buffer as usize;
+        let pBuffer = pTruncLdrTableDataEntry.BaseDllName.Buffer as usize;
         // set bCounter to the length for the loop
-        let mut usCounter = (*pTruncLdrTableDataEntry).BaseDllName.Length as usize;
+        let mut usCounter = pTruncLdrTableDataEntry.BaseDllName.Length as usize;
         // clear uiValueC which will store the hash of the module name
         let dwModuleHash = hash_case_insensitive(pBuffer, usCounter);
 
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         // compare the hash with that of kernel32.dll
         if dwModuleHash == KERNEL32DLL_HASH {
             // get this modules base address
-            let lpBaseAddress = (*pTruncLdrTableDataEntry).DllBase;
+            let lpBaseAddress = pTruncLdrTableDataEntry.DllBase;
 
             let pImageDosHeader = lpBaseAddress as *const IMAGE_DOS_HEADER;
             // get the VA of the modules NT Header
@@ -171,7 +171,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
             }
         } else if dwModuleHash == NTDLLDLL_HASH {
             // get this modules base address
-            let lpBaseAddress = (*pTruncLdrTableDataEntry).DllBase;
+            let lpBaseAddress = pTruncLdrTableDataEntry.DllBase;
 
             let pImageDosHeader = lpBaseAddress as *const IMAGE_DOS_HEADER;
             // get the VA of the modules NT Header
@@ -242,7 +242,7 @@ pub unsafe extern "C" fn ReflectiveLoader(lpParameter: *mut usize) -> usize {
         }
 
         // get next entry
-        pModuleList = (*pModuleList).Flink;
+        pModuleList = pModuleList.Flink;
     }
 
     let fnLoadLibraryA: LoadLibraryA = mem::transmute(pLoadLibraryA);

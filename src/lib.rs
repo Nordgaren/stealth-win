@@ -68,8 +68,8 @@ mod tests {
     use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
     use crate::hash::hash_case_insensitive;
     use crate::loader::ReflectiveLoader;
-    use crate::util::{get_dll_base, get_resource_bytes, get_return};
-    use crate::windows::kernel32::{get_peb, GetModuleHandle, GetProcAddress};
+    use crate::util::{get_dll_base, get_resource_bytes, get_return_address};
+    use crate::windows::kernel32::{get_peb, GetModuleHandle, GetProcAddress, LoadLibraryA};
     use crate::windows::ntdll::PEB;
     use std::mem;
     use std::ptr::addr_of;
@@ -85,11 +85,32 @@ mod tests {
     #[test]
     fn get_proc_address() {
         unsafe {
-            let loadLibarayA = GetProcAddress(
+            let load_library_a_addr = GetProcAddress(
                 GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
                 "LoadLibraryA".as_bytes(),
             );
-            assert_ne!(loadLibarayA, 0)
+            let LoadLibraryA: LoadLibraryA = mem::transmute(load_library_a_addr);
+            let library_handle = LoadLibraryA("USER32.dll".as_ptr());
+            assert_ne!(load_library_a_addr, 0)
+        }
+    }
+
+    #[test]
+    fn get_proc_address_by_ordinal() {
+        unsafe {
+            let load_library_a_address_ordinal = GetProcAddress(
+                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+                &[0xC5, 0x03],
+            );
+            let load_library_a_address = GetProcAddress(
+                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+                "LoadLibraryA".as_bytes(),
+            );
+            let load_library: LoadLibraryA = mem::transmute(load_library_a_address_ordinal);
+            let library_handle = LoadLibraryA("USER32.dll".as_ptr());
+            let library_handle_ordinal = load_library("USER32.dll".as_ptr());
+            assert_eq!(load_library_a_address_ordinal, load_library_a_address);
+            assert_eq!(library_handle, library_handle_ordinal)
         }
     }
 
@@ -116,7 +137,7 @@ mod tests {
     #[test]
     fn get_return_addr() {
         unsafe {
-            let get_return = get_return();
+            let get_return = get_return_address();
             assert_ne!(get_return, 0)
         }
     }

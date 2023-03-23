@@ -230,8 +230,8 @@ pub struct TRUNC_LDR_DATA_TABLE_ENTRY {
 
 #[repr(C)]
 pub struct LIST_ENTRY {
-    pub Flink: *mut LIST_ENTRY,
-    pub Blink: *mut LIST_ENTRY,
+    pub Flink: &'static LIST_ENTRY,
+    pub Blink: &'static LIST_ENTRY,
 }
 
 #[repr(C)]
