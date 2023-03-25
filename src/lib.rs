@@ -92,24 +92,26 @@ mod tests {
         }
     }
 
-    #[test]
-    fn get_proc_address_by_ordinal() {
-        unsafe {
-            let load_library_a_address_ordinal = GetProcAddressInternal(
-                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
-                &[0xC9, 0x03, 0x00, 0x00],
-            );
-            let load_library_a_address = GetProcAddressInternal(
-                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
-                "LoadLibraryA".as_bytes(),
-            );
-            let load_library: LoadLibraryA = mem::transmute(load_library_a_address_ordinal);
-            let library_handle = LoadLibraryA("USER32.dll".as_ptr());
-            let library_handle_ordinal = load_library("USER32.dll".as_ptr());
-            assert_eq!(load_library_a_address_ordinal, load_library_a_address);
-            assert_eq!(library_handle, library_handle_ordinal)
-        }
-    }
+    //#[test]
+    // you will need to get the ordinal from your particular kernel32.dll build on your system, to
+    // enable this test.
+    // fn get_proc_address_by_ordinal() {
+    //     unsafe {
+    //         let load_library_a_address_ordinal = GetProcAddressInternal(
+    //             GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+    //             &[0xC9, 0x03, 0x00, 0x00],
+    //         );
+    //         let load_library_a_address = GetProcAddressInternal(
+    //             GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+    //             "LoadLibraryA".as_bytes(),
+    //         );
+    //         let load_library: LoadLibraryA = mem::transmute(load_library_a_address_ordinal);
+    //         let library_handle = LoadLibraryA("USER32.dll".as_ptr());
+    //         let library_handle_ordinal = load_library("USER32.dll".as_ptr());
+    //         assert_eq!(load_library_a_address_ordinal, load_library_a_address);
+    //         assert_eq!(library_handle, library_handle_ordinal)
+    //     }
+    // }
 
     #[test]
     fn get_fwd_proc_address() {
