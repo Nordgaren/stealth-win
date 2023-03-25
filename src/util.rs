@@ -4,8 +4,10 @@
 
 use crate::consts::*;
 use std::arch::global_asm;
+use std::ffi::CStr;
 use std::mem;
 //use std::fs;
+use crate::windows::kernel32::MAX_PATH;
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
     IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY,
@@ -14,18 +16,18 @@ use crate::windows::ntdll::{
 use std::mem::size_of;
 use std::ptr::{addr_of, addr_of_mut};
 
-pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
+pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe { get_resource(resource_id) };
     let end = offset + len;
 
-    resource[offset..end].to_vec()
+    &resource[offset..end]
 }
 
-pub fn get_unmapped_resource_bytes(resource_id: u32, offset: usize, len: usize) -> Vec<u8> {
+pub fn get_unmapped_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe { get_unmapped_resource(resource_id) };
     let end = offset + len;
 
-    resource[offset..end].to_vec()
+    &resource[offset..end]
 }
 
 unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
@@ -138,7 +140,8 @@ pub unsafe fn get_dll_base() -> usize {
             // we sanity check the e_lfanew with an upper threshold value of 1024 to avoid problems.
             if pDosHeader.e_lfanew < 0x400 {
                 // break if we have found a valid MZ/PE header
-                let pNtHeaders: &IMAGE_NT_HEADERS = mem::transmute(pLibraryAddress + pDosHeader.e_lfanew as usize);
+                let pNtHeaders: &IMAGE_NT_HEADERS =
+                    mem::transmute(pLibraryAddress + pDosHeader.e_lfanew as usize);
                 if pNtHeaders.Signature == IMAGE_NT_SIGNATURE {
                     return pLibraryAddress;
                 }
@@ -211,16 +214,81 @@ pub(crate) fn hi_byte(n: usize) -> u8 {
     ((n >> 8) & 0xFF) as u8
 }
 
-#[cfg(test)]
-pub(crate) unsafe fn print_buffer_as_string(string_ptr: *const u8, len: usize) {
-    let buff = std::slice::from_raw_parts(string_ptr, len);
-    let str = String::from_utf8(buff.to_vec()).unwrap();
-    println!("{}", str);
+pub(crate) fn find_pos(string: &[u8], char: u8) -> usize {
+    for i in 0..string.len() {
+        if string[i] == char {
+            return i;
+        }
+    }
+
+    usize::MAX
 }
 
-#[cfg(test)]
-pub(crate) unsafe fn print_buffer_as_string_utf16(string_ptr: *const u16, len: usize) {
-    let buff = std::slice::from_raw_parts(string_ptr, len);
-    let str = String::from_utf16(buff).unwrap();
-    println!("{}", str);
+pub const fn strlen(s: *const u8) -> usize {
+    let mut len = 0;
+    while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {
+        len += 1;
+    }
+
+    len
+}
+
+// These two comparison methods were inspired by Jonas
+
+const CASE_BIT: u8 = 0x20;
+
+// CStr is the easiest way to deal with C-style strings in Rust. Here we will take in the xor'd string
+// as bytes, a CString from the place in memory we are searching, and the key. Do the same as the
+// wide string version, without the casts. This way we can compare the strings without allocating and
+// xoring memory.
+pub(crate) fn compare_xor_c_str_and_c_str_bytes(
+    xor_c_string: &[u8],
+    c_string_bytes: &[u8],
+    key: &[u8],
+    case_insensitive: bool,
+) -> bool {
+    if xor_c_string.len() != c_string_bytes.len() && c_string_bytes.len() != key.len() {
+        return false;
+    }
+
+    for i in 0..xor_c_string.len() {
+        let mut val = c_string_bytes[i];
+        if case_insensitive && val >= 0x41 && val <= 0x5A {
+            val ^= CASE_BIT
+        }
+
+        val ^= key[i];
+        if val ^ xor_c_string[i] != 0 {
+            return false;
+        }
+    }
+
+    true
+}
+
+// This function assumes that the wide string version of each character in the string is just the u16
+// version of the ASCII character. The DLL names are all stored in memory as wide strings, and this is
+// the best solution I have without allocating on the heap for wide string encoding.
+pub(crate) fn compare_xor_c_str_and_w_str_bytes(
+    xor_c_string: &[u8],
+    w_string_bytes: &[u16],
+    key: &[u8],
+    case_insensitive: bool,
+) -> bool {
+    if xor_c_string.len() != w_string_bytes.len() && w_string_bytes.len() != key.len() {
+        return false;
+    }
+
+    for i in 0..xor_c_string.len() {
+        let mut w_val = w_string_bytes[i];
+        if case_insensitive && w_val >= 0x41 && w_val <= 0x5A {
+            w_val ^= CASE_BIT as u16;
+        }
+        w_val ^= key[i] as u16;
+        if w_val ^ xor_c_string[i] as u16 != 0 {
+            return false;
+        }
+    }
+
+    true
 }

@@ -200,7 +200,7 @@ pub struct PEB_LDR_DATA {
     pub InMemoryOrderModuleList: LIST_ENTRY,
     pub InInitializationOrderModuleList: LIST_ENTRY,
     pub EntryInProgress: usize,
-    pub ShutdownInProgress: u8,
+    pub ShutdownInProgress: u32,
     pub ShutdownThreadId: usize,
 }
 

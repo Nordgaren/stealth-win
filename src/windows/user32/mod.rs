@@ -3,8 +3,9 @@
 #![allow(unused)]
 
 use crate::consts::*;
-use crate::crypto_util::get_aes_encrypted_resource_bytes;
-use crate::windows::kernel32::{GetModuleHandle, GetProcAddress};
+use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
+use crate::util::get_resource_bytes;
+use crate::windows::kernel32::{GetModuleHandleX, GetProcAddress, GetProcAddressX};
 
 //user32.dll
 pub type MessageBoxA = unsafe extern "system" fn(
@@ -47,12 +48,13 @@ pub const MB_RIGHT: u32 = 0x00080000;
 pub const MB_RTLREADING: u32 = 0x00100000;
 
 pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, uType: u32) -> u32 {
-    let messageBoxA: MessageBoxA = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_aes_encrypted_resource_bytes(
-            USER32_DLL_POS,
-            USER32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(MESSAGEBOXA_POS, MESSAGEBOXA_LEN).as_slice(),
+    let messageBoxA: MessageBoxA = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, USER32_DLL_KEY, USER32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, USER32_DLL_POS, USER32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, MESSAGEBOXA_POS, MESSAGEBOXA_LEN),
+        get_resource_bytes(RESOURCE_ID, MESSAGEBOXA_KEY, MESSAGEBOXA_LEN),
     ));
 
     messageBoxA(hWnd, lpText, lpCaption, uType)

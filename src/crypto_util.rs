@@ -127,26 +127,26 @@ pub fn aes_decrypt_bytes(bytes: &mut Vec<u8>, key: &[u8], iv: &[u8]) {
 }
 
 pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> Vec<u8> {
-    let mut resource = get_resource_bytes(RESOURCE_ID, offset, len);
+    let mut resource = get_resource_bytes(RESOURCE_ID, offset, len).to_vec();
     let key = get_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
     let iv = get_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
-    aes_decrypt_bytes(&mut resource, key.as_slice(), iv.as_slice());
+    aes_decrypt_bytes(&mut resource, key, iv);
 
     resource
 }
 
 pub fn get_aes_encrypted_resource_bytes_unmapped(offset: usize, len: usize) -> Vec<u8> {
-    let mut resource = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
+    let mut resource = get_unmapped_resource_bytes(RESOURCE_ID, offset, len).to_vec(); // can't do this in unmapped, need to revisit.
     let key = get_unmapped_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
     let iv = get_unmapped_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
-    aes_decrypt_bytes(&mut resource, key.as_slice(), iv.as_slice());
+    aes_decrypt_bytes(&mut resource, key, iv);
 
     resource
 }
 
-pub fn get_xor_encrypted_string(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
+pub fn get_xor_encrypted_bytes(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
     let key = get_resource_bytes(RESOURCE_ID, key_offset, len);
-    let mut buff = get_resource_bytes(RESOURCE_ID, offset, len);
+    let mut buff = get_resource_bytes(RESOURCE_ID, offset, len).to_vec();
 
     for i in 0..len {
         buff[i] ^= key[i];
@@ -155,9 +155,9 @@ pub fn get_xor_encrypted_string(offset: usize, key_offset: usize, len: usize) ->
     buff
 }
 
-pub fn get_xor_encrypted_string_unmapped(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
+pub fn get_xor_encrypted_bytes_unmapped(offset: usize, key_offset: usize, len: usize) -> Vec<u8> {
     let key = get_unmapped_resource_bytes(RESOURCE_ID, key_offset, len);
-    let mut buffer = get_unmapped_resource_bytes(RESOURCE_ID, offset, len);
+    let mut buffer = get_unmapped_resource_bytes(RESOURCE_ID, offset, len).to_vec(); // can't do this in unmapped, need to revisit.
 
     for i in 0..len {
         buffer[i] ^= key[i];

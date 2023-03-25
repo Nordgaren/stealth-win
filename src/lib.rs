@@ -2,15 +2,13 @@
 #![allow(non_snake_case)]
 #![allow(unused)]
 
-mod consts;
-mod crypto_util;
-mod hash;
-mod loader;
-mod util;
-mod windows;
+pub mod consts;
+pub mod crypto_util;
+pub mod util;
+pub mod windows;
 
 use crate::consts::*;
-use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
+use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
 use crate::windows::kernel32::LoadLibraryA;
 use crate::windows::user32::*;
 
@@ -49,11 +47,11 @@ pub extern "stdcall" fn DllMain(hinstDLL: usize, dwReason: u32, lpReserved: *mut
 fn load_libraries() {
     unsafe {
         let mut advapi =
-            get_xor_encrypted_string(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN);
+            get_xor_encrypted_bytes(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN);
         advapi.push(0);
         LoadLibraryA(advapi.as_ptr());
 
-        let mut user32 = get_aes_encrypted_resource_bytes(USER32_DLL_POS, USER32_DLL_LEN);
+        let mut user32 = get_xor_encrypted_bytes(USER32_DLL_POS, USER32_DLL_KEY, USER32_DLL_LEN);
         user32.push(0);
         LoadLibraryA(user32.as_ptr());
     }
@@ -62,14 +60,15 @@ fn load_libraries() {
 #[cfg(test)]
 mod tests {
     use crate::consts::{
-        KERNEL32_DLL_KEY, KERNEL32_DLL_LEN, KERNEL32_DLL_POS, RESOURCE_ID, USER32_DLL_LEN,
-        USER32_DLL_POS,
+        KERNEL32_DLL_KEY, KERNEL32_DLL_LEN, KERNEL32_DLL_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN,
+        LOADLIBRARYA_POS, RESOURCE_ID, USER32_DLL_LEN, USER32_DLL_POS,
     };
-    use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_string};
-    use crate::hash::hash_case_insensitive;
-    use crate::loader::ReflectiveLoader;
+    use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
     use crate::util::{get_dll_base, get_resource_bytes, get_return_address};
-    use crate::windows::kernel32::{get_peb, GetModuleHandle, GetProcAddress, LoadLibraryA};
+    use crate::windows::kernel32::{
+        get_peb, GetModuleHandle, GetModuleHandleA, GetModuleHandleX, GetProcAddress,
+        GetProcAddressInternal, GetProcAddressX, LoadLibraryA,
+    };
     use crate::windows::ntdll::PEB;
     use std::mem;
     use std::ptr::addr_of;
@@ -85,12 +84,10 @@ mod tests {
     #[test]
     fn get_proc_address() {
         unsafe {
-            let load_library_a_addr = GetProcAddress(
+            let load_library_a_addr = GetProcAddressInternal(
                 GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
                 "LoadLibraryA".as_bytes(),
             );
-            let LoadLibraryA: LoadLibraryA = mem::transmute(load_library_a_addr);
-            let library_handle = LoadLibraryA("USER32.dll".as_ptr());
             assert_ne!(load_library_a_addr, 0)
         }
     }
@@ -98,11 +95,11 @@ mod tests {
     #[test]
     fn get_proc_address_by_ordinal() {
         unsafe {
-            let load_library_a_address_ordinal = GetProcAddress(
+            let load_library_a_address_ordinal = GetProcAddressInternal(
                 GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
-                &[0xC5, 0x03],
+                &[0xC9, 0x03, 0x00, 0x00],
             );
-            let load_library_a_address = GetProcAddress(
+            let load_library_a_address = GetProcAddressInternal(
                 GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
                 "LoadLibraryA".as_bytes(),
             );
@@ -117,7 +114,7 @@ mod tests {
     #[test]
     fn get_fwd_proc_address() {
         unsafe {
-            let pWideCharToMultiByte = GetProcAddress(
+            let pWideCharToMultiByte = GetProcAddressInternal(
                 GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
                 "AcquireSRWLockExclusive".as_bytes(),
             );
@@ -154,39 +151,39 @@ mod tests {
     fn get_xor_encrypted_string_test() {
         unsafe {
             let kernel32 =
-                get_xor_encrypted_string(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN);
-            assert_eq!(&kernel32[..], "KERNEL32.DLL".as_bytes())
+                get_xor_encrypted_bytes(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN);
+            assert_eq!(&kernel32[..], "kernel32.dll".as_bytes())
         }
     }
 
     #[test]
-    fn get_aes_encrypted_resource_bytes_test() {
+    fn get_module_handle_x_test() {
         unsafe {
-            let user32 = get_aes_encrypted_resource_bytes(USER32_DLL_POS, USER32_DLL_LEN);
-            assert_eq!(&user32[..], "USER32.dll".as_bytes())
+            let kernel32 = GetModuleHandleX(
+                get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+                get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+            );
+            let kernel32_normal = GetModuleHandleA("KERNEL32.DLL\0".as_ptr());
+            assert_eq!(kernel32, kernel32_normal);
         }
     }
 
     #[test]
-    fn playground() {
+    fn get_proc_address_x_test() {
         unsafe {
-            let mut sFwdDll = match std::fs::read("Bingus") {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-
-            println!("Failed to return early");
-            // let floppa = API_SET_NAMESPACE_V6{
-            //     Version: 0,
-            //     Size: 0,
-            //     Flags: 0,
-            //     Count: 0,
-            //     EntryOffset: 69,
-            //     HashOffset: 0,
-            //     HashFactor: 0,
-            // };
-            // let k32 = "KERNEL32.DLL".encode_utf16().collect::<Vec<u16>>();
-            // ApiSetpSearchForApiSetV6(addr_of!(floppa), k32.as_ptr(), k32.len() as u16);
+            let load_library_a_handle_x = GetProcAddressX(
+                GetModuleHandleX(
+                    get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+                    get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+                ),
+                get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_POS, LOADLIBRARYA_LEN),
+                get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
+            );
+            let load_library_a_handle = GetProcAddress(
+                GetModuleHandleA("KERNEL32.DLL\0".as_ptr()),
+                "LoadLibraryA\0".as_ptr(),
+            );
+            assert_eq!(load_library_a_handle_x, load_library_a_handle);
         }
     }
 }
