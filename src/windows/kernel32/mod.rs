@@ -5,7 +5,8 @@
 use crate::consts::*;
 use crate::crypto_util::*;
 use crate::util::{
-    compare_xor_c_str_and_c_str_bytes, compare_xor_c_str_and_w_str_bytes, get_resource_bytes, strlen,
+    compare_xor_c_str_and_c_str_bytes, compare_xor_c_str_and_w_str_bytes, get_resource_bytes,
+    strlen,
 };
 #[cfg(test)]
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
@@ -18,54 +19,109 @@ use std::str::Utf8Error;
 use std::{mem, slice};
 
 //KERNEL32.DLL
-pub type LoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
-pub type GetLastError = unsafe extern "system" fn() -> u32;
-pub type GetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
-pub type GetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
-pub type GetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
-pub type FindResourceA =
-    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
-pub type LoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
-pub type LockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
-pub type SizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
-pub type CreateToolhelp32Snapshot =
-    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
-pub type Process32First =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
-pub type Process32Next =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool;
-pub type CloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
-pub type OpenProcess =
-    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
-pub type NtFlushInstructionCache =
-    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
-pub type VirtualAllocEx = unsafe extern "system" fn(
+pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
+pub type FnCreateFileA = unsafe extern "system" fn(
+    lpFileName: *const u8,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: usize,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: usize,
+) -> usize;
+pub type FnCreateProcessA = unsafe extern "system" fn(
+    lpApplicationName: *const u8,
+    lpCommandLine: *const u8,
+    lpProcessAttributes: usize,
+    lpThreadAttributes: usize,
+    bInheritHandles: u32,
+    dwCreationFlags: u32,
+    lpEnvironment: usize,
+    lpCurrentDirectory: *const u8,
+    lpStartupInfo: *const STARTUPINFOA,
+    lpProcessInformation: *const PROCESS_INFORMATION,
+) -> u32;
+pub type FnLoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
+pub type FnGetFinalPathNameByHandleA = unsafe extern "system" fn(
+    hFile: usize,
+    lpszFilePath: *const u8,
+    cchFilePath: u32,
+    dwFlags: u32,
+) -> u32;
+pub type FnGetLastError = unsafe extern "system" fn() -> u32;
+pub type FnGetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
+pub type FnGetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
+pub type FnGetProcAddress = unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+pub type FnFindResourceA =
+unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+pub type FnLoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
+pub type FnLockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
+pub type FnSizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
+pub type FnCreateToolhelp32Snapshot =
+unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+pub type FnProcess32First =
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+pub type FnProcess32Next =
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
+pub type FnOpenFile = unsafe extern "system" fn(
+    lpFileName: *const u8,
+    lpReOpenBuff: *const OFSTRUCT,
+    uStyle: u32,
+) -> i32;
+pub type FnOpenProcess =
+unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+pub type FnIsProcessorFeaturePresent =
+unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
+pub type FnNtFlushInstructionCache =
+unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+pub type FnResumeThread = unsafe extern "system" fn(hThread: usize) -> u32;
+pub type FnSetStdHandle = unsafe extern "system" fn(
+    nStdHandle: u32,
+    hHandle: usize,
+) -> u32;
+pub type FnVirtualAllocEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
     dwSize: usize,
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize;
-pub type VirtualAlloc = unsafe extern "system" fn(
+pub type FnVirtualAlloc = unsafe extern "system" fn(
     lpAddress: usize,
     dwSize: usize,
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize;
-pub type VirtualProtect = unsafe extern "system" fn(
+pub type FnVirtualProtect = unsafe extern "system" fn(
     lpAddress: usize,
     dwSize: usize,
     flNewProtect: u32,
     lpflOldProtect: *mut u32,
-) -> bool;
-pub type WriteProcessMemory = unsafe extern "system" fn(
+) -> u32;
+pub type FnVirtualFree =
+unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
+pub type FnVirtualFreeEx = unsafe extern "system" fn(
+    hProcess: usize,
+    lpAddress: usize,
+    dwSize: usize,
+    dwFreeType: u32,
+) -> usize;
+pub type FnWriteFile = unsafe extern "system" fn(
+    hFile: usize,
+    lpBuffer: *const u8,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: *const u32,
+    lpOverlapped: *const OVERLAPPED,
+) -> u32;
+pub type FnWriteProcessMemory = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
     lpBuffer: *const u8,
     nSize: usize,
     lpNumberOfBytesWritten: usize,
-) -> bool;
-pub type CreateRemoteThread = unsafe extern "system" fn(
+) -> u32;
+pub type FnCreateRemoteThread = unsafe extern "system" fn(
     hProcess: usize,
     lpThreadAttributes: usize,
     dwStackSize: usize,
@@ -74,10 +130,9 @@ pub type CreateRemoteThread = unsafe extern "system" fn(
     dwCreationFlags: u32,
     lpThreadId: *mut u32,
 ) -> usize;
-pub type WaitForSingleObject =
-    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
-
-pub type GetCurrentProcess = unsafe extern "system" fn() -> usize;
+pub type FnWaitForSingleObject =
+unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+pub type FnGetCurrentProcess = unsafe extern "system" fn() -> usize;
 
 pub const PROCESS_TERMINATE: u32 = 0x0001;
 pub const PROCESS_CREATE_THREAD: u32 = 0x0002;
@@ -93,6 +148,7 @@ pub const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
 pub const PROCESS_SUSPEND_RESUME: u32 = 0x0800;
 pub const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 pub const PROCESS_SET_LIMITED_INFORMATION: u32 = 0x2000;
+pub const PROCESS_ALL_ACCESS: u32 = 0x000F0000 | 0x00100000 | 0xFFFF;
 
 pub const MEM_COMMIT: u32 = 0x00001000;
 pub const MEM_RESERVE: u32 = 0x00002000;
@@ -130,6 +186,151 @@ pub const PAGE_WRITECOMBINE: u32 = 0x400;
 pub const TH32CS_SNAPPROCESS: u32 = 0x00000002;
 pub const INVALID_HANDLE_VALUE: usize = usize::MAX;
 pub const MAX_PATH: usize = 260;
+pub const OFS_MAXPATHNAME: usize = 128;
+
+pub const OF_READ: usize = 0x00000000;
+pub const OF_WRITE: usize = 0x00000001;
+pub const OF_READWRITE: usize = 0x00000002;
+pub const OF_SHARE_COMPAT: usize = 0x00000000;
+pub const OF_SHARE_EXCLUSIVE: usize = 0x00000010;
+pub const OF_SHARE_DENY_WRITE: usize = 0x00000020;
+pub const OF_SHARE_DENY_READ: usize = 0x00000030;
+pub const OF_SHARE_DENY_NONE: usize = 0x00000040;
+pub const OF_PARSE: usize = 0x00000100;
+pub const OF_DELETE: usize = 0x00000200;
+pub const OF_VERIFY: usize = 0x00000400;
+pub const OF_CANCEL: usize = 0x00000800;
+pub const OF_CREATE: usize = 0x00001000;
+pub const OF_PROMPT: usize = 0x00002000;
+pub const OF_EXIST: usize = 0x00004000;
+pub const OF_REOPEN: usize = 0x00008000;
+
+pub const GENERIC_READ: u32 = 0x80000000;
+pub const GENERIC_WRITE: u32 = 0x40000000;
+pub const GENERIC_EXECUTE: u32 = 0x20000000;
+pub const GENERIC_ALL: u32 = 0x10000000;
+
+pub const FILE_SHARE_READ: u32 = 0x00000001;
+pub const FILE_SHARE_WRITE: u32 = 0x00000002;
+pub const FILE_SHARE_DELETE: u32 = 0x00000004;
+pub const FILE_ATTRIBUTE_READONLY: u32 = 0x00000001;
+pub const FILE_ATTRIBUTE_HIDDEN: u32 = 0x00000002;
+pub const FILE_ATTRIBUTE_SYSTEM: u32 = 0x00000004;
+pub const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x00000010;
+pub const FILE_ATTRIBUTE_ARCHIVE: u32 = 0x00000020;
+pub const FILE_ATTRIBUTE_DEVICE: u32 = 0x00000040;
+pub const FILE_ATTRIBUTE_NORMAL: u32 = 0x00000080;
+pub const FILE_ATTRIBUTE_TEMPORARY: u32 = 0x00000100;
+pub const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x00000200;
+pub const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x00000400;
+pub const FILE_ATTRIBUTE_COMPRESSED: u32 = 0x00000800;
+pub const FILE_ATTRIBUTE_OFFLINE: u32 = 0x00001000;
+pub const FILE_ATTRIBUTE_NOT_CONTENT_INDEXED: u32 = 0x00002000;
+pub const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x00004000;
+pub const FILE_ATTRIBUTE_INTEGRITY_STREAM: u32 = 0x00008000;
+pub const FILE_ATTRIBUTE_VIRTUAL: u32 = 0x00010000;
+pub const FILE_ATTRIBUTE_NO_SCRUB_DATA: u32 = 0x00020000;
+pub const FILE_ATTRIBUTE_EA: u32 = 0x00040000;
+pub const FILE_ATTRIBUTE_PINNED: u32 = 0x00080000;
+pub const FILE_ATTRIBUTE_UNPINNED: u32 = 0x00100000;
+pub const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x00040000;
+pub const FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS: u32 = 0x00400000;
+pub const TREE_CONNECT_ATTRIBUTE_PRIVACY: u32 = 0x00004000;
+pub const TREE_CONNECT_ATTRIBUTE_INTEGRITY: u32 = 0x00008000;
+pub const TREE_CONNECT_ATTRIBUTE_GLOBAL: u32 = 0x00000004;
+pub const TREE_CONNECT_ATTRIBUTE_PINNED: u32 = 0x00000002;
+pub const FILE_ATTRIBUTE_STRICTLY_SEQUENTIAL: u32 = 0x20000000;
+pub const FILE_NOTIFY_CHANGE_FILE_NAME: u32 = 0x00000001;
+pub const FILE_NOTIFY_CHANGE_DIR_NAME: u32 = 0x00000002;
+pub const FILE_NOTIFY_CHANGE_ATTRIBUTES: u32 = 0x00000004;
+pub const FILE_NOTIFY_CHANGE_SIZE: u32 = 0x00000008;
+pub const FILE_NOTIFY_CHANGE_LAST_WRITE: u32 = 0x00000010;
+pub const FILE_NOTIFY_CHANGE_LAST_ACCESS: u32 = 0x00000020;
+pub const FILE_NOTIFY_CHANGE_CREATION: u32 = 0x00000040;
+pub const FILE_NOTIFY_CHANGE_SECURITY: u32 = 0x00000100;
+pub const FILE_ACTION_ADDED: u32 = 0x00000001;
+pub const FILE_ACTION_REMOVED: u32 = 0x00000002;
+pub const FILE_ACTION_MODIFIED: u32 = 0x00000003;
+pub const FILE_ACTION_RENAMED_OLD_NAME: u32 = 0x00000004;
+pub const FILE_ACTION_RENAMED_NEW_NAME: u32 = 0x00000005;
+pub const MAILSLOT_NO_MESSAGE: u32 = u32::MAX;
+pub const MAILSLOT_WAIT_FOREVER: u32 = u32::MAX;
+pub const FILE_CASE_SENSITIVE_SEARCH: u32 = 0x00000001;
+pub const FILE_CASE_PRESERVED_NAMES: u32 = 0x00000002;
+pub const FILE_UNICODE_ON_DISK: u32 = 0x00000004;
+pub const FILE_PERSISTENT_ACLS: u32 = 0x00000008;
+pub const FILE_FILE_COMPRESSION: u32 = 0x00000010;
+pub const FILE_VOLUME_QUOTAS: u32 = 0x00000020;
+pub const FILE_SUPPORTS_SPARSE_FILES: u32 = 0x00000040;
+pub const FILE_SUPPORTS_REPARSE_POINTS: u32 = 0x00000080;
+pub const FILE_SUPPORTS_REMOTE_STORAGE: u32 = 0x00000100;
+pub const FILE_RETURNS_CLEANUP_RESULT_INFO: u32 = 0x00000200;
+pub const FILE_SUPPORTS_POSIX_UNLINK_RENAME: u32 = 0x00000400;
+pub const FILE_SUPPORTS_BYPASS_IO: u32 = 0x00000800;
+pub const FILE_VOLUME_IS_COMPRESSED: u32 = 0x00008000;
+pub const FILE_SUPPORTS_OBJECT_IDS: u32 = 0x00010000;
+pub const FILE_SUPPORTS_ENCRYPTION: u32 = 0x00020000;
+pub const FILE_NAMED_STREAMS: u32 = 0x00040000;
+pub const FILE_READ_ONLY_VOLUME: u32 = 0x00080000;
+pub const FILE_SEQUENTIAL_WRITE_ONCE: u32 = 0x00100000;
+pub const FILE_SUPPORTS_TRANSACTIONS: u32 = 0x00200000;
+pub const FILE_SUPPORTS_HARD_LINKS: u32 = 0x00400000;
+pub const FILE_SUPPORTS_EXTENDED_ATTRIBUTES: u32 = 0x00800000;
+pub const FILE_SUPPORTS_OPEN_BY_FILE_ID: u32 = 0x01000000;
+pub const FILE_SUPPORTS_USN_JOURNAL: u32 = 0x02000000;
+pub const FILE_SUPPORTS_INTEGRITY_STREAMS: u32 = 0x04000000;
+pub const FILE_SUPPORTS_BLOCK_REFCOUNTING: u32 = 0x08000000;
+pub const FILE_SUPPORTS_SPARSE_VDL: u32 = 0x10000000;
+pub const FILE_DAX_VOLUME: u32 = 0x20000000;
+pub const FILE_SUPPORTS_GHOSTING: u32 = 0x40000000;
+
+pub const CREATE_NEW: u32 = 1;
+pub const CREATE_ALWAYS: u32 = 2;
+pub const OPEN_EXISTING: u32 = 3;
+pub const OPEN_ALWAYS: u32 = 4;
+pub const TRUNCATE_EXISTING: u32 = 5;
+
+pub const STD_INPUT_HANDLE: u32 = 0xFFFFFFF6;
+pub const STD_OUTPUT_HANDLE: u32 =  0xFFFFFFF6;
+pub const STD_ERROR_HANDLE: u32 =  0xFFFFFFF4;
+
+//
+// Process dwCreationFlag values
+//
+pub const DEBUG_PROCESS: u32 = 0x00000001;
+pub const DEBUG_ONLY_THIS_PROCESS: u32 = 0x00000002;
+pub const CREATE_SUSPENDED: u32 = 0x00000004;
+pub const DETACHED_PROCESS: u32 = 0x00000008;
+pub const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+pub const NORMAL_PRIORITY_CLASS: u32 = 0x00000020;
+pub const IDLE_PRIORITY_CLASS: u32 = 0x00000040;
+pub const HIGH_PRIORITY_CLASS: u32 = 0x00000080;
+pub const REALTIME_PRIORITY_CLASS: u32 = 0x00000100;
+pub const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+pub const CREATE_UNICODE_ENVIRONMENT: u32 = 0x00000400;
+pub const CREATE_SEPARATE_WOW_VDM: u32 = 0x00000800;
+pub const CREATE_SHARED_WOW_VDM: u32 = 0x00001000;
+pub const CREATE_FORCEDOS: u32 = 0x00002000;
+pub const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x00004000;
+pub const ABOVE_NORMAL_PRIORITY_CLASS: u32 = 0x00008000;
+pub const INHERIT_PARENT_AFFINITY: u32 = 0x00010000;
+pub const CREATE_PROTECTED_PROCESS: u32 = 0x00040000;
+pub const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x00080000;
+pub const PROCESS_MODE_BACKGROUND_BEGIN: u32 = 0x00100000;
+pub const PROCESS_MODE_BACKGROUND_END: u32 = 0x00200000;
+pub const CREATE_SECURE_PROCESS: u32 = 0x00400000;
+pub const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x01000000;
+pub const CREATE_PRESERVE_CODE_AUTHZ_LEVEL: u32 = 0x02000000;
+pub const CREATE_DEFAULT_ERROR_MODE: u32 = 0x04000000;
+pub const CREATE_NO_WINDOW: u32 = 0x08000000;
+pub const PROFILE_USER: u32 = 0x10000000;
+pub const PROFILE_KERNEL: u32 = 0x20000000;
+pub const PROFILE_SERVER: u32 = 0x40000000;
+pub const CREATE_IGNORE_SYSTEM_DEFAULT: u32 = 0x80000000;
+// Deprecated
+pub const INHERIT_CALLER_PRIORITY: usize = 0x00020000;
+
+pub const INFINITE: u32 = u32::MAX;
 
 #[repr(C)]
 pub struct PROCESSENTRY32 {
@@ -143,6 +344,55 @@ pub struct PROCESSENTRY32 {
     pub pcPriClassBase: i32,
     pub dwFlags: u32,
     pub szExeFile: [u8; MAX_PATH],
+}
+
+#[repr(C)]
+pub struct OFSTRUCT {
+    pub cBytes: u8,
+    pub fFixedDisk: u8,
+    pub nErrCode: u16,
+    pub Reserved1: u16,
+    pub Reserved2: u16,
+    pub szPathName: [u8; OFS_MAXPATHNAME],
+}
+
+#[repr(C)]
+pub struct STARTUPINFOA {
+    pub cb: u32,
+    pub lpReserved: *const u8,
+    pub lpDesktop: *const u8,
+    pub lpTitle: *const u8,
+    pub dwX: u32,
+    pub dwY: u32,
+    pub dwXSize: u32,
+    pub dwYSize: u32,
+    pub dwXCountChars: u32,
+    pub dwYCountChars: u32,
+    pub dwFillAttribute: u32,
+    pub dwFlags: u32,
+    pub wShowWindow: u16,
+    pub cbReserved2: u16,
+    pub lpReserved2: usize,
+    pub hStdInput: usize,
+    pub hStdOutput: usize,
+    pub hStdError: usize,
+}
+
+#[repr(C)]
+pub struct PROCESS_INFORMATION {
+    pub hProcess: usize,
+    pub hThread: usize,
+    pub dwProcessId: i32,
+    pub dwThreadId: i32,
+}
+
+#[repr(C)]
+pub struct OVERLAPPED {
+    Internal: usize,
+    InternalHigh: usize,
+    Offset: u32,
+    OffsetHigh: u32,
+    hEvent: usize,
 }
 
 extern "C" {
@@ -188,9 +438,9 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
 
         if &sModuleNameW[..]
             == std::slice::from_raw_parts(
-                pEntry.BaseDllName.Buffer,
-                (pEntry.BaseDllName.Length / 2) as usize,
-            )
+            pEntry.BaseDllName.Buffer,
+            (pEntry.BaseDllName.Length / 2) as usize,
+        )
         {
             return pEntry.DllBase;
         }
@@ -199,7 +449,6 @@ pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
 
     0
 }
-
 pub unsafe fn GetModuleHandleX(xor_c_string: &[u8], key: &[u8]) -> usize {
     let peb = get_peb();
 
@@ -227,13 +476,12 @@ pub unsafe fn GetModuleHandleX(xor_c_string: &[u8], key: &[u8]) -> usize {
 
     0
 }
-
 pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
     let pBaseAddr = hMod;
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
-    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
     let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY =
         mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
 
@@ -304,12 +552,11 @@ pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
 
     pProcAddr
 }
-
 pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8]) -> usize {
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
-    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
     let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY =
         mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
 
@@ -367,36 +614,128 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8])
 
     pProcAddr
 }
+pub unsafe fn AllocConsole() -> u32 {
+    let allocConsole: FnAllocConsole = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        "AllocConsole".as_bytes(),
+    ));
 
+    allocConsole()
+}
+pub unsafe fn CreateFileA(
+    lpFileName: *const u8,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: usize,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: usize,
+) -> usize {
+    let createFileA: FnCreateFileA = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, CREATEFILEA_POS, CREATEFILEA_LEN),
+        get_resource_bytes(RESOURCE_ID, CREATEFILEA_KEY, CREATEFILEA_LEN),
+    ));
+
+    createFileA(
+        lpFileName,
+        dwDesiredAccess,
+        dwShareMode,
+        lpSecurityAttributes,
+        dwCreationDisposition,
+        dwFlagsAndAttributes,
+        hTemplateFile,
+    )
+}
+pub unsafe fn CreateProcessA(
+    lpApplicationName: *const u8,
+    lpCommandLine: *const u8,
+    lpProcessAttributes: usize,
+    lpThreadAttributes: usize,
+    bInheritHandles: u32,
+    dwCreationFlags: u32,
+    lpEnvironment: usize,
+    lpCurrentDirectory: *const u8,
+    lpStartupInfo: *const STARTUPINFOA,
+    lpProcessInformation: *const PROCESS_INFORMATION,
+) -> u32 {
+    let createProcessA: FnCreateProcessA = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, CREATEPROCESSA_POS, CREATEPROCESSA_LEN),
+        get_resource_bytes(RESOURCE_ID, CREATEPROCESSA_KEY, CREATEPROCESSA_LEN),
+    ));
+
+    createProcessA(
+        lpApplicationName,
+        lpCommandLine,
+        lpProcessAttributes,
+        lpThreadAttributes,
+        bInheritHandles,
+        dwCreationFlags,
+        lpEnvironment,
+        lpCurrentDirectory,
+        lpStartupInfo,
+        lpProcessInformation,
+    )
+}
+pub unsafe fn GetFinalPathNameByHandleA(
+    hFile: usize,
+    lpszFilePath: *const u8,
+    cchFilePath: u32,
+    dwFlags: u32,
+) -> u32 {
+    let getFinalPathNameByHandleA: FnGetFinalPathNameByHandleA =
+        std::mem::transmute(GetProcAddressInternal(
+            GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+            "GetFinalPathNameByHandleA".as_bytes(),
+        ));
+
+    getFinalPathNameByHandleA(hFile, lpszFilePath, cchFilePath, dwFlags)
+}
 pub unsafe fn GetModuleHandleA(lpModuleName: *const u8) -> usize {
-    let getModuleHandleA: GetModuleHandleA = std::mem::transmute(GetProcAddressInternal(
+    let getModuleHandleA: FnGetModuleHandleA = std::mem::transmute(GetProcAddressInternal(
         GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
         "GetModuleHandleA".as_bytes(),
     ));
 
     getModuleHandleA(lpModuleName)
 }
-
 pub unsafe fn GetModuleHandleW(lpModuleName: *const u16) -> usize {
-    let getModuleHandleW: GetModuleHandleW = std::mem::transmute(GetProcAddressInternal(
+    let getModuleHandleW: FnGetModuleHandleW = std::mem::transmute(GetProcAddressInternal(
         GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
         "GetModuleHandleW".as_bytes(),
     ));
 
     getModuleHandleW(lpModuleName)
 }
-
 pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
-    let getProcAddress: GetProcAddress = std::mem::transmute(GetProcAddressInternal(
+    let getProcAddress: FnGetProcAddress = std::mem::transmute(GetProcAddressInternal(
         GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
         "GetProcAddress".as_bytes(),
     ));
 
     getProcAddress(hModule, lpProcName)
 }
+pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uStyle: u32) -> i32 {
+    let openFile: FnOpenFile = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, OPENFILE_POS, OPENFILE_LEN),
+        get_resource_bytes(RESOURCE_ID, OPENFILE_KEY, OPENFILE_LEN),
+    ));
 
+    openFile(lpFileName, lpReOpenBuff, uStyle)
+}
 pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize {
-    let openProcess: OpenProcess = std::mem::transmute(GetProcAddressX(
+    let openProcess: FnOpenProcess = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -407,9 +746,16 @@ pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId
 
     openProcess(dwDesiredAccess, bInheritHandle, dwProcessId)
 }
+pub unsafe fn  IsProcessorFeaturePresent(ProcessorFeature: u32) -> u32 {
+    let isProcessorFeaturePresent: FnIsProcessorFeaturePresent = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        "IsProcessorFeaturePresent".as_bytes(),
+    ));
 
+    isProcessorFeaturePresent(ProcessorFeature)
+}
 pub unsafe fn CloseHandle(hObject: usize) -> bool {
-    let closeHandle: CloseHandle = std::mem::transmute(GetProcAddressX(
+    let closeHandle: FnCloseHandle = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -420,9 +766,8 @@ pub unsafe fn CloseHandle(hObject: usize) -> bool {
 
     closeHandle(hObject)
 }
-
 pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
-    let loadLibraryA: LoadLibraryA = std::mem::transmute(GetProcAddressX(
+    let loadLibraryA: FnLoadLibraryA = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -433,9 +778,8 @@ pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
 
     loadLibraryA(lpLibFileName)
 }
-
 pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usize {
-    let createToolhelp32Snapshot: CreateToolhelp32Snapshot = std::mem::transmute(GetProcAddressX(
+    let createToolhelp32Snapshot: FnCreateToolhelp32Snapshot = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -454,9 +798,8 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
 }
-
-pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool {
-    let process32First: Process32First = std::mem::transmute(GetProcAddressX(
+pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 {
+    let process32First: FnProcess32First = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -467,9 +810,8 @@ pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> boo
 
     process32First(hSnapshot, lppe)
 }
-
-pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool {
-    let process32Next: Process32Next = std::mem::transmute(GetProcAddressX(
+pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 {
+    let process32Next: FnProcess32Next = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -480,14 +822,36 @@ pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> bool
 
     process32Next(hSnapshot, lppe)
 }
+pub unsafe fn ResumeThread(hThread: usize) -> u32 {
+    let resumeThread: FnResumeThread = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, RESUMETHREAD_POS, RESUMETHREAD_LEN),
+        get_resource_bytes(RESOURCE_ID, RESUMETHREAD_KEY, RESUMETHREAD_LEN),
+    ));
 
+    resumeThread(hThread)
+}
+pub unsafe fn SetStdHandle(
+    nStdHandle: u32,
+    hHandle: usize,
+) -> u32 {
+    let setStdHandle: FnSetStdHandle = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        "SetStdHandle".as_bytes(),
+    ));
+
+    setStdHandle(nStdHandle, hHandle)
+}
 pub unsafe fn VirtualAlloc(
     lpAddress: usize,
     dwSize: usize,
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize {
-    let virtualAlloc: VirtualAlloc = std::mem::transmute(GetProcAddressX(
+    let virtualAlloc: FnVirtualAlloc = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -498,7 +862,6 @@ pub unsafe fn VirtualAlloc(
 
     virtualAlloc(lpAddress, dwSize, flAllocationType, flProtect)
 }
-
 pub unsafe fn VirtualAllocEx(
     hProcess: usize,
     lpAddress: usize,
@@ -506,7 +869,7 @@ pub unsafe fn VirtualAllocEx(
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize {
-    let virtualAllocEx: VirtualAllocEx = std::mem::transmute(GetProcAddressX(
+    let virtualAllocEx: FnVirtualAllocEx = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -517,14 +880,13 @@ pub unsafe fn VirtualAllocEx(
 
     virtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect)
 }
-
 pub unsafe fn VirtualProtect(
     lpAddress: usize,
     dwSize: usize,
     flNewProtect: u32,
     lpflOldProtect: *mut u32,
-) -> bool {
-    let virtualProtect: VirtualProtect = std::mem::transmute(GetProcAddressX(
+) -> u32 {
+    let virtualProtect: FnVirtualProtect = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -535,15 +897,67 @@ pub unsafe fn VirtualProtect(
 
     virtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
 }
+pub unsafe fn VirtualFree(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize {
+    let virtualFree: FnVirtualFree = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, VIRTUALFREE_POS, VIRTUALFREE_LEN),
+        get_resource_bytes(RESOURCE_ID, VIRTUALFREE_KEY, VIRTUALFREE_LEN),
+    ));
 
+    virtualFree(lpAddress, dwSize, dwFreeType)
+}
+pub unsafe fn VirtualFreeEx(
+    hProcess: usize,
+    lpAddress: usize,
+    dwSize: usize,
+    dwFreeType: u32,
+) -> usize {
+    let virtualFreeEx: FnVirtualFreeEx = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, VIRTUALFREEEX_POS, VIRTUALFREEEX_LEN),
+        get_resource_bytes(RESOURCE_ID, VIRTUALFREEEX_KEY, VIRTUALFREEEX_LEN),
+    ));
+
+    virtualFreeEx(hProcess, lpAddress, dwSize, dwFreeType)
+}
+pub unsafe fn WriteFile(
+    hFile: usize,
+    lpBuffer: *const u8,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: *const u32,
+    lpOverlapped: *const OVERLAPPED,
+) -> u32 {
+    let writeFile: FnWriteFile = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, WRITEFILE_POS, WRITEFILE_LEN),
+        get_resource_bytes(RESOURCE_ID, WRITEFILE_KEY, WRITEFILE_LEN),
+    ));
+
+    writeFile(
+        hFile,
+        lpBuffer,
+        nNumberOfBytesToWrite,
+        lpNumberOfBytesWritten,
+        lpOverlapped,
+    )
+}
 pub unsafe fn WriteProcessMemory(
     hProcess: usize,
     lpAddress: usize,
     lpBuffer: *const u8,
     nSize: usize,
     lpNumberOfBytesWritten: usize,
-) -> bool {
-    let writeProcessMemory: WriteProcessMemory = std::mem::transmute(GetProcAddressX(
+) -> u32 {
+    let writeProcessMemory: FnWriteProcessMemory = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -554,7 +968,6 @@ pub unsafe fn WriteProcessMemory(
 
     writeProcessMemory(hProcess, lpAddress, lpBuffer, nSize, lpNumberOfBytesWritten)
 }
-
 pub unsafe fn CreateRemoteThread(
     hProcess: usize,
     lpThreadAttributes: usize,
@@ -564,7 +977,7 @@ pub unsafe fn CreateRemoteThread(
     dwCreationFlags: u32,
     lpThreadId: *mut u32,
 ) -> usize {
-    let createRemoteThread: CreateRemoteThread = std::mem::transmute(GetProcAddressX(
+    let createRemoteThread: FnCreateRemoteThread = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -583,9 +996,8 @@ pub unsafe fn CreateRemoteThread(
         lpThreadId,
     )
 }
-
 pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
-    let waitForSingleObject: WaitForSingleObject = std::mem::transmute(GetProcAddressX(
+    let waitForSingleObject: FnWaitForSingleObject = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -604,9 +1016,8 @@ pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
 
     waitForSingleObject(hProcess, dwMilliseconds)
 }
-
 pub unsafe fn GetLastError() -> u32 {
-    let getLastError: GetLastError = std::mem::transmute(GetProcAddressX(
+    let getLastError: FnGetLastError = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -617,9 +1028,8 @@ pub unsafe fn GetLastError() -> u32 {
 
     getLastError()
 }
-
 pub unsafe fn GetCurrentProcess() -> usize {
-    let getCurrentProcess: GetCurrentProcess = std::mem::transmute(GetProcAddressX(
+    let getCurrentProcess: FnGetCurrentProcess = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),

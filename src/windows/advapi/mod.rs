@@ -8,43 +8,43 @@ use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddress, GetProcAddressX};
 
 //advapi32.dll
-pub type CryptAcquireContextW = unsafe extern "system" fn(
+pub type FnCryptAcquireContextW = unsafe extern "system" fn(
     phProv: *mut usize,
     szContainer: usize,
     szProvider: *const u16,
     dwProvType: u32,
     dwFlags: u32,
 ) -> bool;
-pub type CryptCreateHash = unsafe extern "system" fn(
+pub type FnCryptCreateHash = unsafe extern "system" fn(
     phProv: usize,
     ALG_ID: u32,
     hKey: usize,
     dwFlags: u32,
     phHash: *mut usize,
 ) -> bool;
-pub type CryptHashData = unsafe extern "system" fn(
+pub type FnCryptHashData = unsafe extern "system" fn(
     hHash: usize,
     pbData: *const u8,
     dwDataLen: u32,
     dwFlags: u32,
 ) -> bool;
-pub type CryptSetKeyParam =
+pub type FnCryptSetKeyParam =
     unsafe extern "system" fn(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool;
-pub type CryptGetKeyParam = unsafe extern "system" fn(
+pub type FnCryptGetKeyParam = unsafe extern "system" fn(
     hKey: usize,
     dwParam: u32,
     pbData: *mut u8,
     pbDataLen: *mut u32,
     dwFlags: u32,
 ) -> bool;
-pub type CryptDeriveKey = unsafe extern "system" fn(
+pub type FnCryptDeriveKey = unsafe extern "system" fn(
     hHash: usize,
     Algid: u32,
     hBaseData: usize,
     dwFlags: u32,
     phKey: *mut usize,
 ) -> bool;
-pub type CryptDecrypt = unsafe extern "system" fn(
+pub type FnCryptDecrypt = unsafe extern "system" fn(
     hKey: usize,
     hHash: usize,
     Final: u32,
@@ -52,7 +52,7 @@ pub type CryptDecrypt = unsafe extern "system" fn(
     pbData: *mut u8,
     pdwDataLen: *mut u32,
 ) -> bool;
-pub type CryptEncrypt = unsafe extern "system" fn(
+pub type FnCryptEncrypt = unsafe extern "system" fn(
     hKey: usize,
     hHash: usize,
     Final: u32,
@@ -62,9 +62,9 @@ pub type CryptEncrypt = unsafe extern "system" fn(
     dwBufLen: u32,
 ) -> bool;
 
-pub type CryptReleaseContext = unsafe extern "system" fn(hProv: usize, dwFlags: u32) -> bool;
-pub type CryptDestroyKey = unsafe extern "system" fn(hKey: usize) -> bool;
-pub type CryptDestroyHash = unsafe extern "system" fn(hHash: usize) -> bool;
+pub type FnCryptReleaseContext = unsafe extern "system" fn(hProv: usize, dwFlags: u32) -> bool;
+pub type FnCryptDestroyKey = unsafe extern "system" fn(hKey: usize) -> bool;
+pub type FnCryptDestroyHash = unsafe extern "system" fn(hHash: usize) -> bool;
 
 pub const ALG_CLASS_HASH: u32 = 4 << 13;
 pub const ALG_TYPE_ANY: u32 = 0;
@@ -90,7 +90,7 @@ pub unsafe fn CryptAcquireContextW(
     dwProvType: u32,
     dwFlags: u32,
 ) -> bool {
-    let cryptAcquireContextW: CryptAcquireContextW = std::mem::transmute(GetProcAddressX(
+    let cryptAcquireContextW: FnCryptAcquireContextW = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -109,7 +109,6 @@ pub unsafe fn CryptAcquireContextW(
 
     cryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)
 }
-
 pub unsafe fn CryptCreateHash(
     phProv: usize,
     ALG_ID: u32,
@@ -117,7 +116,7 @@ pub unsafe fn CryptCreateHash(
     dwFlags: u32,
     phHash: *mut usize,
 ) -> bool {
-    let cryptCreateHash: CryptCreateHash = std::mem::transmute(GetProcAddressX(
+    let cryptCreateHash: FnCryptCreateHash = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -128,9 +127,8 @@ pub unsafe fn CryptCreateHash(
 
     cryptCreateHash(phProv, ALG_ID, hKey, dwFlags, phHash)
 }
-
 pub unsafe fn CryptHashData(hHash: usize, pbData: *const u8, dwDataLen: u32, dwFlags: u32) -> bool {
-    let cryptHashData: CryptHashData = std::mem::transmute(GetProcAddressX(
+    let cryptHashData: FnCryptHashData = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -141,7 +139,6 @@ pub unsafe fn CryptHashData(hHash: usize, pbData: *const u8, dwDataLen: u32, dwF
 
     cryptHashData(hHash, pbData, dwDataLen, dwFlags)
 }
-
 pub unsafe fn CryptDeriveKey(
     hHash: usize,
     Algid: u32,
@@ -149,7 +146,7 @@ pub unsafe fn CryptDeriveKey(
     dwFlags: u32,
     phKey: *mut usize,
 ) -> bool {
-    let cryptDeriveKey: CryptDeriveKey = std::mem::transmute(GetProcAddressX(
+    let cryptDeriveKey: FnCryptDeriveKey = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -160,9 +157,8 @@ pub unsafe fn CryptDeriveKey(
 
     cryptDeriveKey(hHash, Algid, hBaseData, dwFlags, phKey)
 }
-
 pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool {
-    let cryptSetKeyParam: CryptSetKeyParam = std::mem::transmute(GetProcAddressX(
+    let cryptSetKeyParam: FnCryptSetKeyParam = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -173,7 +169,6 @@ pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwF
 
     cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)
 }
-
 pub unsafe fn CryptGetKeyParam(
     hKey: usize,
     dwParam: u32,
@@ -181,7 +176,7 @@ pub unsafe fn CryptGetKeyParam(
     pbDataLen: *mut u32,
     dwFlags: u32,
 ) -> bool {
-    let cryptGetKeyParam: CryptGetKeyParam = std::mem::transmute(GetProcAddressX(
+    let cryptGetKeyParam: FnCryptGetKeyParam = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -192,7 +187,6 @@ pub unsafe fn CryptGetKeyParam(
 
     cryptGetKeyParam(hKey, dwParam, pbData, pbDataLen, dwFlags)
 }
-
 pub unsafe fn CryptDecrypt(
     hKey: usize,
     hHash: usize,
@@ -201,7 +195,7 @@ pub unsafe fn CryptDecrypt(
     pbData: *mut u8,
     pdwDataLen: *mut u32,
 ) -> bool {
-    let cryptDecrypt: CryptDecrypt = std::mem::transmute(GetProcAddressX(
+    let cryptDecrypt: FnCryptDecrypt = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -212,7 +206,6 @@ pub unsafe fn CryptDecrypt(
 
     cryptDecrypt(hKey, hHash, Final, dwFlags, pbData, pdwDataLen)
 }
-
 pub unsafe fn CryptEncrypt(
     hKey: usize,
     hHash: usize,
@@ -222,7 +215,7 @@ pub unsafe fn CryptEncrypt(
     pdwDataLen: *mut u32,
     dwBufLen: u32,
 ) -> bool {
-    let cryptEncrypt: CryptEncrypt = std::mem::transmute(GetProcAddressX(
+    let cryptEncrypt: FnCryptEncrypt = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -233,9 +226,8 @@ pub unsafe fn CryptEncrypt(
 
     cryptEncrypt(hKey, hHash, Final, dwFlags, pbData, pdwDataLen, dwBufLen)
 }
-
 pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
-    let cryptReleaseContext: CryptReleaseContext = std::mem::transmute(GetProcAddressX(
+    let cryptReleaseContext: FnCryptReleaseContext = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -254,9 +246,8 @@ pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
 
     cryptReleaseContext(hProv, dwFlags)
 }
-
 pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
-    let cryptDestroyKey: CryptDestroyKey = std::mem::transmute(GetProcAddressX(
+    let cryptDestroyKey: FnCryptDestroyKey = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),
@@ -267,9 +258,8 @@ pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
 
     cryptDestroyKey(hKey)
 }
-
 pub unsafe fn CryptDestroyHash(hHash: usize) -> bool {
-    let cryptDestroyHash: CryptDestroyHash = std::mem::transmute(GetProcAddressX(
+    let cryptDestroyHash: FnCryptDestroyHash = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_POS, ADVAPI32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN),

@@ -2,8 +2,8 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-pub type DllMain =
-    extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
+pub type FnDllMain =
+extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
 
 #[repr(C)]
 pub struct IMAGE_IMPORT_BY_NAME {
@@ -265,21 +265,21 @@ pub struct RESOURCE_DATA_ENTRY {
     pub Reserved: u32,
 }
 
-pub const IMAGE_DIRECTORY_ENTRY_ARCHITECTURE: usize = 7;
-pub const IMAGE_DIRECTORY_ENTRY_BASERELOC: usize = 5;
-pub const IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT: usize = 11;
-pub const IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR: usize = 14;
-pub const IMAGE_DIRECTORY_ENTRY_DEBUG: usize = 6;
-pub const IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT: usize = 13;
-pub const IMAGE_DIRECTORY_ENTRY_EXCEPTION: usize = 3;
-pub const IMAGE_DIRECTORY_ENTRY_EXPORT: usize = 0;
-pub const IMAGE_DIRECTORY_ENTRY_GLOBALPTR: usize = 8;
-pub const IMAGE_DIRECTORY_ENTRY_IAT: usize = 12;
-pub const IMAGE_DIRECTORY_ENTRY_IMPORT: usize = 1;
-pub const IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG: usize = 10;
-pub const IMAGE_DIRECTORY_ENTRY_RESOURCE: usize = 2;
-pub const IMAGE_DIRECTORY_ENTRY_SECURITY: usize = 4;
-pub const IMAGE_DIRECTORY_ENTRY_TLS: usize = 9;
+pub const IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:u16 = 7;
+pub const IMAGE_DIRECTORY_ENTRY_BASERELOC:u16 = 5;
+pub const IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT:u16 = 11;
+pub const IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR:u16 = 14;
+pub const IMAGE_DIRECTORY_ENTRY_DEBUG:u16 = 6;
+pub const IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT:u16 = 13;
+pub const IMAGE_DIRECTORY_ENTRY_EXCEPTION:u16 = 3;
+pub const IMAGE_DIRECTORY_ENTRY_EXPORT:u16 = 0;
+pub const IMAGE_DIRECTORY_ENTRY_GLOBALPTR:u16 = 8;
+pub const IMAGE_DIRECTORY_ENTRY_IAT:u16 = 12;
+pub const IMAGE_DIRECTORY_ENTRY_IMPORT:u16 = 1;
+pub const IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG:u16 = 10;
+pub const IMAGE_DIRECTORY_ENTRY_RESOURCE:u16 = 2;
+pub const IMAGE_DIRECTORY_ENTRY_SECURITY:u16 = 4;
+pub const IMAGE_DIRECTORY_ENTRY_TLS:u16 = 9;
 
 pub const DLL_PROCESS_ATTACH: u32 = 1;
 pub const DLL_THREAD_ATTACH: u32 = 2;

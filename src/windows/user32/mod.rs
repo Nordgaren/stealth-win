@@ -8,7 +8,7 @@ use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddress, GetProcAddressX};
 
 //user32.dll
-pub type MessageBoxA = unsafe extern "system" fn(
+pub type FnMessageBoxA = unsafe extern "system" fn(
     hWnd: usize,
     lpText: *const u8,
     lpCaption: *const u8,
@@ -48,7 +48,7 @@ pub const MB_RIGHT: u32 = 0x00080000;
 pub const MB_RTLREADING: u32 = 0x00100000;
 
 pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, uType: u32) -> u32 {
-    let messageBoxA: MessageBoxA = std::mem::transmute(GetProcAddressX(
+    let messageBoxA: FnMessageBoxA = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, USER32_DLL_KEY, USER32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, USER32_DLL_POS, USER32_DLL_LEN),

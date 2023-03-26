@@ -9,7 +9,7 @@ const DLL_PATH: &'static str = r"";
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
 
-static XOR_STRINGS: [&str; 33] = [
+static XOR_STRINGS: [&str; 40] = [
     "LoadLibraryA",
     "CryptAcquireContextW",
     "CryptCreateHash",
@@ -27,10 +27,15 @@ static XOR_STRINGS: [&str; 33] = [
     "VirtualAlloc",
     "VirtualAllocEx",
     "VirtualProtect",
+    "VirtualFree",
+    "VirtualFreeEx",
     "CreateRemoteThread",
     "WaitForSingleObject",
     "WriteProcessMemory",
     "OpenProcess",
+    "CreateProcessA",
+    "OpenFile",
+    "ResumeThread",
     "RtlMoveMemory",
     "CreateToolhelp32Snapshot",
     "Process32First",
@@ -43,6 +48,8 @@ static XOR_STRINGS: [&str; 33] = [
     "NtFlushInstructionCache",
     "USER32.dll",
     "GetCurrentProcess",
+    "WriteFile",
+    "CreateFileA",
 ];
 
 // Will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build'

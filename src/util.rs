@@ -36,7 +36,7 @@ unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
     let pDosHdr: &IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
-    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE];
+    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE as usize];
 
     let pResourceDirAddr: &RESOURCE_DIRECTORY_TABLE =
         mem::transmute(pBaseAddr + pResourceDataDir.VirtualAddress as usize);
@@ -52,7 +52,7 @@ unsafe fn get_unmapped_resource(resource_id: u32) -> &'static [u8] {
     let pDosHdr: &IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
-    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE];
+    let pResourceDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE as usize];
 
     let pResourceDirAddrFOA = rva_to_foa(pNTHdr, pResourceDataDir.VirtualAddress);
     let pResourceDirAddr: &RESOURCE_DIRECTORY_TABLE =
@@ -234,7 +234,6 @@ pub const fn strlen(s: *const u8) -> usize {
 }
 
 // These two comparison methods were inspired by Jonas
-
 const CASE_BIT: u8 = 0x20;
 
 // CStr is the easiest way to deal with C-style strings in Rust. Here we will take in the xor'd string
@@ -267,7 +266,7 @@ pub(crate) fn compare_xor_c_str_and_c_str_bytes(
 }
 
 // This function assumes that the wide string version of each character in the string is just the u16
-// version of the ASCII character. The DLL names are all stored in memory as wide strings, and this is
+// version of the ASCII character. The DLL names are all stored in Windows memory as wide strings, and this is
 // the best solution I have without allocating on the heap for wide string encoding.
 pub(crate) fn compare_xor_c_str_and_w_str_bytes(
     xor_c_string: &[u8],
