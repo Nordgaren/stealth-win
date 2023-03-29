@@ -1,4 +1,4 @@
-use crate::windows::kernel32::{GetModuleHandle, GetProcAddressInternal};
+use crate::windows::kernel32::{GetModuleHandleInternal, GetProcAddressInternal};
 use crate::windows::ntdll::IMAGE_SECTION_HEADER;
 
 pub type FnImageDirectoryEntryToDataEx = unsafe extern "system" fn(
@@ -18,7 +18,7 @@ pub unsafe fn ImageDirectoryEntryToDataEx(
 ) -> usize {
     let imageDirectoryEntryToDataEx: FnImageDirectoryEntryToDataEx =
         std::mem::transmute(GetProcAddressInternal(
-            GetModuleHandle("dbghelp.dll".as_bytes().to_vec()),
+            GetModuleHandleInternal("dbghelp.dll".as_bytes().to_vec()),
             "ImageDirectoryEntryToDataEx".as_bytes(),
         ));
 

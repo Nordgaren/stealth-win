@@ -17,20 +17,30 @@ use std::mem::size_of;
 use std::ptr::{addr_of, addr_of_mut};
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
-    let resource = unsafe { get_resource(resource_id) };
+    let resource = unsafe {
+        if check_mapped() {
+            get_resource_mapped(resource_id)
+        } else {
+            get_resource_unmapped(resource_id)
+        }
+    };
     let end = offset + len;
 
     &resource[offset..end]
 }
 
-pub fn get_unmapped_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
-    let resource = unsafe { get_unmapped_resource(resource_id) };
-    let end = offset + len;
+unsafe fn check_mapped() -> bool {
+    let pBaseAddr = get_dll_base();
+    let pDosHdr: &IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
+    let pNTHdr: &IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
+    let pOptionalHdr = &pNTHdr.OptionalHeader;
+    let pBeforeCode = pBaseAddr + pOptionalHdr.BaseOfCode as usize - 0x8;
+    let pu64 = pBeforeCode as *const u64;
 
-    &resource[offset..end]
+    return *pu64 == 0;
 }
 
-unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
+unsafe fn get_resource_mapped(resource_id: u32) -> &'static [u8] {
     let pBaseAddr = get_dll_base();
 
     let pDosHdr: &IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
@@ -46,7 +56,7 @@ unsafe fn get_resource(resource_id: u32) -> &'static [u8] {
     std::slice::from_raw_parts(pData as *const u8, pResourceDataEntry.DataSize as usize)
 }
 
-unsafe fn get_unmapped_resource(resource_id: u32) -> &'static [u8] {
+unsafe fn get_resource_unmapped(resource_id: u32) -> &'static [u8] {
     let pBaseAddr = get_dll_base();
 
     let pDosHdr: &IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
@@ -123,16 +133,13 @@ unsafe fn get_entry_offset_by_name(pResourceDirAddr: &RESOURCE_DIRECTORY_TABLE, 
     0
 }
 
-const ALIGN_16: usize = usize::MAX - 0xF;
+const PAGE_BOUNDRY: usize = 0x1000;
 
 pub unsafe fn get_dll_base() -> usize {
-    // functions always end on 16 byte aligned address, relative to the beginning of the file.
-    let mut pLibraryAddress = get_return_address() & ALIGN_16;
+    // file will be mapped to the start of a page boundary.
+    let mut pLibraryAddress = get_return_address() & !(PAGE_BOUNDRY - 1);
 
     loop {
-        // for some reason, 16 byte alignment is unstable for this function, in x86, so use sizeof::<usize>() * 2
-        pLibraryAddress -= size_of::<usize>() * 2;
-
         let pos = pLibraryAddress as *const u16;
         if *pos == IMAGE_DOS_SIGNATURE {
             let pDosHeader: &IMAGE_DOS_HEADER = mem::transmute(pos);
@@ -147,6 +154,9 @@ pub unsafe fn get_dll_base() -> usize {
                 }
             }
         }
+
+        // Just search on the page boundaries.
+        pLibraryAddress -= PAGE_BOUNDRY;
     }
 }
 
@@ -195,26 +205,26 @@ unsafe fn rva_to_foa(pNtHeaders: &IMAGE_NT_HEADERS, dwRVA: u32) -> u32 {
 }
 
 #[inline(always)]
-pub(crate) fn low_word(n: usize) -> u16 {
+pub fn low_word(n: usize) -> u16 {
     (n & 0xFFFF) as u16
 }
 
 #[inline(always)]
-pub(crate) fn hi_word(n: usize) -> u16 {
+pub fn hi_word(n: usize) -> u16 {
     ((n >> 16) & 0xFFFF) as u16
 }
 
 #[inline(always)]
-pub(crate) fn low_byte(n: usize) -> u8 {
+pub fn low_byte(n: usize) -> u8 {
     (n & 0xFF) as u8
 }
 
 #[inline(always)]
-pub(crate) fn hi_byte(n: usize) -> u8 {
+pub fn hi_byte(n: usize) -> u8 {
     ((n >> 8) & 0xFF) as u8
 }
 
-pub(crate) fn find_pos(string: &[u8], char: u8) -> usize {
+pub fn find_pos(string: &[u8], char: u8) -> usize {
     for i in 0..string.len() {
         if string[i] == char {
             return i;
@@ -240,7 +250,7 @@ const CASE_BIT: u8 = 0x20;
 // as bytes, a CString from the place in memory we are searching, and the key. Do the same as the
 // wide string version, without the casts. This way we can compare the strings without allocating and
 // xoring memory.
-pub(crate) fn compare_xor_c_str_and_c_str_bytes(
+pub fn compare_xor_c_str_and_c_str_bytes(
     xor_c_string: &[u8],
     c_string_bytes: &[u8],
     key: &[u8],
@@ -268,7 +278,7 @@ pub(crate) fn compare_xor_c_str_and_c_str_bytes(
 // This function assumes that the wide string version of each character in the string is just the u16
 // version of the ASCII character. The DLL names are all stored in Windows memory as wide strings, and this is
 // the best solution I have without allocating on the heap for wide string encoding.
-pub(crate) fn compare_xor_c_str_and_w_str_bytes(
+pub fn compare_xor_c_str_and_w_str_bytes(
     xor_c_string: &[u8],
     w_string_bytes: &[u16],
     key: &[u8],

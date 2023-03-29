@@ -2,17 +2,17 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
+use crate::consts::{
+    NTDLL_DLL_KEY, NTDLL_DLL_LEN, NTDLL_DLL_POS, NTFLUSHINSTRUCTIONCACHE_KEY,
+    NTFLUSHINSTRUCTIONCACHE_LEN, NTFLUSHINSTRUCTIONCACHE_POS, RESOURCE_ID,
+};
+use crate::util::get_resource_bytes;
+use crate::windows::kernel32::{GetModuleHandleX, GetProcAddressX};
+
 pub type FnDllMain =
-extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
-
-#[repr(C)]
-pub struct IMAGE_IMPORT_BY_NAME {
-    pub Hint: u16,
-    pub Name: u8,
-}
-
-pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
-pub const IMAGE_NT_SIGNATURE: u32 = 0x4550;
+    extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
+pub type FnNtFlushInstructionCache =
+    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 
 #[repr(C, packed(2))]
 pub struct IMAGE_DOS_HEADER {
@@ -161,6 +161,12 @@ pub struct IMAGE_EXPORT_DIRECTORY {
     pub AddressOfNameOrdinals: u32, // RVA from base of image
 }
 
+#[repr(C)]
+pub struct IMAGE_IMPORT_BY_NAME {
+    pub Hint: u16,
+    pub Name: u8,
+}
+
 pub type IMAGE_SUBSYSTEM = u16;
 pub type IMAGE_DLL_CHARACTERISTICS = u16;
 pub type IMAGE_FILE_CHARACTERISTICS = u16;
@@ -265,27 +271,29 @@ pub struct RESOURCE_DATA_ENTRY {
     pub Reserved: u32,
 }
 
-pub const IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:u16 = 7;
-pub const IMAGE_DIRECTORY_ENTRY_BASERELOC:u16 = 5;
-pub const IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT:u16 = 11;
-pub const IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR:u16 = 14;
-pub const IMAGE_DIRECTORY_ENTRY_DEBUG:u16 = 6;
-pub const IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT:u16 = 13;
-pub const IMAGE_DIRECTORY_ENTRY_EXCEPTION:u16 = 3;
-pub const IMAGE_DIRECTORY_ENTRY_EXPORT:u16 = 0;
-pub const IMAGE_DIRECTORY_ENTRY_GLOBALPTR:u16 = 8;
-pub const IMAGE_DIRECTORY_ENTRY_IAT:u16 = 12;
-pub const IMAGE_DIRECTORY_ENTRY_IMPORT:u16 = 1;
-pub const IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG:u16 = 10;
-pub const IMAGE_DIRECTORY_ENTRY_RESOURCE:u16 = 2;
-pub const IMAGE_DIRECTORY_ENTRY_SECURITY:u16 = 4;
-pub const IMAGE_DIRECTORY_ENTRY_TLS:u16 = 9;
+pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
+pub const IMAGE_NT_SIGNATURE: u32 = 0x4550;
+
+pub const IMAGE_DIRECTORY_ENTRY_ARCHITECTURE: u16 = 7;
+pub const IMAGE_DIRECTORY_ENTRY_BASERELOC: u16 = 5;
+pub const IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT: u16 = 11;
+pub const IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR: u16 = 14;
+pub const IMAGE_DIRECTORY_ENTRY_DEBUG: u16 = 6;
+pub const IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT: u16 = 13;
+pub const IMAGE_DIRECTORY_ENTRY_EXCEPTION: u16 = 3;
+pub const IMAGE_DIRECTORY_ENTRY_EXPORT: u16 = 0;
+pub const IMAGE_DIRECTORY_ENTRY_GLOBALPTR: u16 = 8;
+pub const IMAGE_DIRECTORY_ENTRY_IAT: u16 = 12;
+pub const IMAGE_DIRECTORY_ENTRY_IMPORT: u16 = 1;
+pub const IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG: u16 = 10;
+pub const IMAGE_DIRECTORY_ENTRY_RESOURCE: u16 = 2;
+pub const IMAGE_DIRECTORY_ENTRY_SECURITY: u16 = 4;
+pub const IMAGE_DIRECTORY_ENTRY_TLS: u16 = 9;
 
 pub const DLL_PROCESS_ATTACH: u32 = 1;
 pub const DLL_THREAD_ATTACH: u32 = 2;
 pub const DLL_THREAD_DETACH: u32 = 3;
 pub const DLL_PROCESS_DETACH: u32 = 0;
-pub const DLL_QUERY_HMODULE: u32 = 6;
 
 pub const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
 pub const IMAGE_REL_BASED_HIGH: u16 = 1;
@@ -303,3 +311,24 @@ pub const IMAGE_REL_BASED_DIR64: u16 = 10;
 pub const IMAGE_ORDINAL_FLAG: usize = 0x8000000000000000;
 #[cfg(all(target_pointer_width = "32"))]
 pub const IMAGE_ORDINAL_FLAG: usize = 0x80000000;
+
+pub unsafe fn NtFlushInstructionCache(hProcess: usize, lpBaseAddress: usize, dwSize: u32) {
+    let ntFlushInstructionCache: FnNtFlushInstructionCache = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
+        ),
+        get_resource_bytes(
+            RESOURCE_ID,
+            NTFLUSHINSTRUCTIONCACHE_POS,
+            NTFLUSHINSTRUCTIONCACHE_LEN,
+        ),
+        get_resource_bytes(
+            RESOURCE_ID,
+            NTFLUSHINSTRUCTIONCACHE_KEY,
+            NTFLUSHINSTRUCTIONCACHE_LEN,
+        ),
+    ));
+
+    ntFlushInstructionCache(hProcess, lpBaseAddress, dwSize)
+}

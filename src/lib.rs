@@ -21,7 +21,7 @@ mod tests {
     use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
     use crate::util::{get_dll_base, get_resource_bytes, get_return_address};
     use crate::windows::kernel32::{
-        get_peb, GetModuleHandle, GetModuleHandleA, GetModuleHandleX, GetProcAddress,
+        get_peb, GetModuleHandleA, GetModuleHandleInternal, GetModuleHandleX, GetProcAddress,
         GetProcAddressInternal, GetProcAddressX, LoadLibraryA,
     };
     use crate::windows::ntdll::PEB;
@@ -31,7 +31,7 @@ mod tests {
     #[test]
     fn get_module_handle() {
         unsafe {
-            let kernel32 = GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec());
+            let kernel32 = GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec());
             assert_ne!(kernel32, 0)
         }
     }
@@ -40,7 +40,7 @@ mod tests {
     fn get_proc_address() {
         unsafe {
             let load_library_a_addr = GetProcAddressInternal(
-                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+                GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
                 "LoadLibraryA".as_bytes(),
             );
             assert_ne!(load_library_a_addr, 0)
@@ -72,7 +72,7 @@ mod tests {
     fn get_fwd_proc_address() {
         unsafe {
             let pWideCharToMultiByte = GetProcAddressInternal(
-                GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+                GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
                 "AcquireSRWLockExclusive".as_bytes(),
             );
             assert_ne!(pWideCharToMultiByte, 0)
