@@ -17,6 +17,7 @@ use std::mem::size_of;
 use std::ptr::{addr_of, addr_of_mut};
 use std::str::Utf8Error;
 use std::{mem, slice};
+use std::slice::from_raw_parts;
 
 //KERNEL32.DLL
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
@@ -459,26 +460,26 @@ pub unsafe fn GetModuleHandleInternal(sModuleName: Vec<u8>) -> usize {
 
     0
 }
-pub unsafe fn GetModuleHandleX(xor_c_string: &[u8], key: &[u8]) -> usize {
+pub unsafe fn GetModuleHandleX(sXorString: &[u8], sKey: &[u8]) -> usize {
     let peb = get_peb();
 
-    if xor_c_string.is_empty() {
+    if sXorString.is_empty() {
         return peb.ImageBaseAddress;
     }
 
-    let Ldr = peb.Ldr;
-    let pModuleList = &Ldr.InMemoryOrderModuleList;
+    let ldr = peb.Ldr;
+    let pModuleList = &ldr.InMemoryOrderModuleList;
     let pStartListEntry = pModuleList.Flink;
 
     let mut pListEntry = pStartListEntry;
     while addr_of!(*pListEntry) as usize != addr_of!(*pModuleList) as usize {
         let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
 
-        let w_string = std::slice::from_raw_parts(
+        let wsName = std::slice::from_raw_parts(
             pEntry.BaseDllName.Buffer,
             (pEntry.BaseDllName.Length / 2) as usize,
         );
-        if compare_xor_c_str_and_w_str_bytes(xor_c_string, w_string, key, true) {
+        if compare_xor_c_str_and_w_str_bytes(sXorString, wsName, sKey, true) {
             return pEntry.DllBase;
         }
         pListEntry = pListEntry.Flink;
@@ -487,8 +488,7 @@ pub unsafe fn GetModuleHandleX(xor_c_string: &[u8], key: &[u8]) -> usize {
     0
 }
 
-pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
-    let pBaseAddr = hMod;
+pub unsafe fn GetProcAddressInternal(pBaseAddr: usize, sProcName: &[u8]) -> usize {
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
@@ -521,14 +521,14 @@ pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
         );
 
         for i in 0..pExportDirAddr.NumberOfNames as usize {
-            let string_ptr = pBaseAddr + sFuncNameTblArray[i] as usize;
-            let c_string = CStr::from_ptr(string_ptr as *const c_char);
+            let pString = pBaseAddr + sFuncNameTblArray[i] as usize;
+            let sName = std::slice::from_raw_parts(pString as *const u8, strlen(pString as *const u8));
             // Debug code for printing out module names.
             // if cfg!(test) {
             //     println!("{:?}", c_string);
             // }
 
-            if sProcName == c_string.to_bytes() {
+            if sProcName == sName {
                 let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
                 let sHintsTblArray = std::slice::from_raw_parts(
                     pHintsTbl as *const u16,
@@ -542,6 +542,7 @@ pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
     if pProcAddr >= addr_of!(pExportDirAddr) as usize
         && pProcAddr < addr_of!(pExportDirAddr) as usize + pExportDataDir.Size as usize
     {
+        //let mut sFwdDll = std::slice::from_raw_parts(pProcAddr as *const u8, strlen(pProcAddr as *const u8));
         let mut sFwdDll = match CStr::from_ptr(pProcAddr as *const c_char).to_str() {
             Ok(s) => s.to_string(),
             Err(_) => return 0,
@@ -563,7 +564,7 @@ pub unsafe fn GetProcAddressInternal(hMod: usize, sProcName: &[u8]) -> usize {
 
     pProcAddr
 }
-pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8]) -> usize {
+pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorString: &[u8], sKey: &[u8]) -> usize {
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
@@ -587,10 +588,10 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8])
     );
 
     for i in 0..pExportDirAddr.NumberOfNames as usize {
-        let string_ptr = (pBaseAddr + sFuncNameTblArray[i] as usize) as *const u8;
-        let c_string = std::slice::from_raw_parts(string_ptr, strlen(string_ptr));
+        let pString = (pBaseAddr + sFuncNameTblArray[i] as usize) as *const u8;
+        let sName = std::slice::from_raw_parts(pString, strlen(pString));
 
-        if compare_xor_c_str_and_c_str_bytes(xor_c_string, c_string, key, true) {
+        if compare_xor_c_str_and_c_str_bytes(sXorString, sName, sKey, true) {
             let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
             let sHintsTblArray = std::slice::from_raw_parts(
                 pHintsTbl as *const u16,
@@ -603,23 +604,25 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, xor_c_string: &[u8], key: &[u8])
     if pProcAddr >= addr_of!(pExportDirAddr) as usize
         && pProcAddr < addr_of!(pExportDirAddr) as usize + pExportDataDir.Size as usize
     {
+        // not compatible with unloaded PE, yet.
         let mut sFwdDll = match CStr::from_ptr(pProcAddr as *const c_char).to_str() {
-            Ok(s) => s.to_string(),
-            Err(_) => return 0,
+            Ok(s) => {s.to_string()}
+            Err(_) => {
+                return 0;
+            }
         };
-        let split_pos = match sFwdDll.find(".") {
+        let szSplitPos = match sFwdDll.find(".") {
             Some(s) => s,
             None => return 0,
         };
-        sFwdDll = sFwdDll.replace(".", "\0");
 
         let hFwd = LoadLibraryA(sFwdDll.as_ptr());
         if hFwd == 0 {
             return 0;
         }
 
-        let string_ptr = (pProcAddr + split_pos + 1) as *const u8;
-        let sFwdFunction = std::slice::from_raw_parts(string_ptr, strlen(string_ptr));
+        let pString = (pProcAddr + szSplitPos + 1) as *const u8;
+        let sFwdFunction = std::slice::from_raw_parts(pString, strlen(pString));
         pProcAddr = GetProcAddressInternal(hFwd, sFwdFunction);
     }
 

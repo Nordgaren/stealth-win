@@ -6,6 +6,7 @@ pub mod consts;
 pub mod crypto_util;
 pub mod util;
 pub mod windows;
+mod svec;
 
 use crate::consts::*;
 use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
@@ -128,6 +129,8 @@ mod tests {
     #[test]
     fn get_proc_address_x_test() {
         unsafe {
+            let mut v = vec![];
+            v.push(0);
             let load_library_a_handle_x = GetProcAddressX(
                 GetModuleHandleX(
                     get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
