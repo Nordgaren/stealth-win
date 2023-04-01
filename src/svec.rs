@@ -17,84 +17,6 @@ pub struct SVec<T> {
     len: usize,
 }
 
-const BACKSPACE: u8 = 8;
-
-impl<T> Display for SVec<T>
-where
-    T: Debug,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.as_slice());
-        Ok(())
-    }
-}
-
-impl<T> UpperHex for SVec<T>
-where
-    T: UpperHex,
-    T: Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:X?}", self.as_slice());
-        Ok(())
-    }
-}
-
-impl<T> LowerHex for SVec<T>
-where
-    T: LowerHex,
-    T: Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x?}", self.as_slice());
-        Ok(())
-    }
-}
-
-impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
-    type Output = Idx::Output;
-    #[inline]
-    fn index(&self, index: Idx) -> &Self::Output {
-        &self.as_slice().index(index)
-    }
-}
-
-impl<T, Idx: SliceIndex<[T]>> IndexMut<Idx> for SVec<T> {
-    #[inline]
-    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        self.as_mut_slice().index_mut(index)
-    }
-}
-
-pub trait ToSVec<T> {
-    fn to_svec(&self) -> SVec<T>;
-}
-
-impl<T> ToSVec<T> for [T]
-where
-    T: Sized,
-{
-    fn to_svec(&self) -> SVec<T> {
-        let mut svec = SVec::with_capacity(self.len());
-
-        unsafe {
-            copy_buffer(self.as_ptr(), svec.as_mut_ptr(), self.len());
-            svec.set_len(self.len());
-        }
-
-        svec
-    }
-}
-
-impl<T> Drop for SVec<T> {
-    fn drop(&mut self) {
-        unsafe {
-            ptr::drop_in_place(ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), self.len));
-            VirtualFree(self.ptr.as_ptr() as usize, 0, MEM_RELEASE);
-        }
-    }
-}
-
 impl<T> SVec<T> {
     // Yes, I took the comment, too, because its hilarious!
     // Tiny Vecs are dumb. Skip to:
@@ -210,6 +132,82 @@ impl<T> SVec<T> {
     }
     pub fn capacity(&self) -> usize {
         self.cap
+    }
+}
+
+impl<T> Display for SVec<T>
+    where
+        T: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.as_slice());
+        Ok(())
+    }
+}
+
+impl<T> UpperHex for SVec<T>
+    where
+        T: UpperHex,
+        T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:X?}", self.as_slice());
+        Ok(())
+    }
+}
+
+impl<T> LowerHex for SVec<T>
+    where
+        T: LowerHex,
+        T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x?}", self.as_slice());
+        Ok(())
+    }
+}
+
+impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
+    type Output = Idx::Output;
+    #[inline]
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.as_slice().index(index)
+    }
+}
+
+impl<T, Idx: SliceIndex<[T]>> IndexMut<Idx> for SVec<T> {
+    #[inline]
+    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
+        self.as_mut_slice().index_mut(index)
+    }
+}
+
+pub trait ToSVec<T> {
+    fn to_svec(&self) -> SVec<T>;
+}
+
+impl<T> ToSVec<T> for [T]
+    where
+        T: Sized,
+{
+    fn to_svec(&self) -> SVec<T> {
+        let mut svec = SVec::with_capacity(self.len());
+
+        unsafe {
+            copy_buffer(self.as_ptr(), svec.as_mut_ptr(), self.len());
+            svec.set_len(self.len());
+        }
+
+        svec
+    }
+}
+
+impl<T> Drop for SVec<T> {
+    fn drop(&mut self) {
+        unsafe {
+            ptr::drop_in_place(ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), self.len));
+            VirtualFree(self.ptr.as_ptr() as usize, 0, MEM_RELEASE);
+        }
     }
 }
 

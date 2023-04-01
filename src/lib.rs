@@ -8,11 +8,6 @@ pub mod util;
 pub mod windows;
 pub mod svec;
 
-use crate::consts::*;
-use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
-use crate::windows::kernel32::LoadLibraryA;
-use crate::windows::user32::*;
-
 #[cfg(test)]
 mod tests {
     use crate::consts::{

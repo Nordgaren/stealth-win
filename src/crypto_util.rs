@@ -7,7 +7,7 @@ use crate::windows::advapi::*;
 use std::ptr::addr_of_mut;
 use crate::svec::{SVec, ToSVec};
 
-fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
+fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> SVec<u8> {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -63,7 +63,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
         }
 
         block_len = block_len >> 3;
-        let mut out = bytes.to_vec();
+        let mut out = bytes.to_svec();
 
         let pad = block_len - (out.len() % block_len as usize) as u32;
         out.resize(out.len() + pad as usize, pad as u8);
@@ -80,7 +80,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> Vec<u8> {
     }
 }
 
-pub fn aes_decrypt_bytes(bytes: &mut SVec<u8>, key: &[u8], iv: &[u8]) {
+pub fn aes_decrypt_bytes(bytes: &mut [u8], key: &[u8], iv: &[u8]) {
     unsafe {
         let mut hProv = 0;
         if !CryptAcquireContextW(
@@ -128,19 +128,10 @@ pub fn aes_decrypt_bytes(bytes: &mut SVec<u8>, key: &[u8], iv: &[u8]) {
 }
 
 pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> SVec<u8> {
-    let mut resource = get_resource_bytes(RESOURCE_ID, offset, len).to_svec();
     let key = get_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
     let iv = get_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
-    aes_decrypt_bytes(&mut resource, key, iv);
-
-    resource
-}
-
-pub fn get_aes_encrypted_resource_bytes_unmapped(offset: usize, len: usize) -> SVec<u8> {
     let mut resource = get_resource_bytes(RESOURCE_ID, offset, len).to_svec();
-    let key = get_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
-    let iv = get_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
-    aes_decrypt_bytes(&mut resource, key, iv);
+    aes_decrypt_bytes(resource.as_mut_slice(), key, iv);
 
     resource
 }
@@ -154,17 +145,6 @@ pub fn get_xor_encrypted_bytes(offset: usize, key_offset: usize, len: usize) -> 
     }
 
     buff
-}
-
-pub fn get_xor_encrypted_bytes_unmapped(offset: usize, key_offset: usize, len: usize) -> SVec<u8> {
-    let key = get_resource_bytes(RESOURCE_ID, key_offset, len);
-    let mut buffer = get_resource_bytes(RESOURCE_ID, offset, len).to_svec();
-
-    for i in 0..len {
-        buffer[i] ^= key[i];
-    }
-
-    buffer
 }
 
 fn get_padding(slice: &[u8]) -> usize {

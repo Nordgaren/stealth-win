@@ -1,7 +1,7 @@
 const RESOURCE_ID: u32 = 100;
 const RESOURCE_NAME: &'static str = "resource.bin";
 
-// Optional paths
+// Optional parameters
 const TARGET_PROCESS: &'static str = "";
 const SHELLCODE_PATH: &'static str = "";
 const DLL_PATH: &'static str = r"";
