@@ -31,7 +31,7 @@ pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'stat
 
 unsafe fn check_mapped(base_address: usize) -> bool {
     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
-    let first_section:&IMAGE_SECTION_HEADER = mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
+    let first_section: &IMAGE_SECTION_HEADER = mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
     let section_on_disk = base_address + first_section.PointerToRawData as usize;
 
     return *(section_on_disk as *const u64) == 0;
@@ -243,7 +243,7 @@ pub const fn strlen(s: *const u8) -> usize {
 // These two comparison methods were inspired by Jonas
 const CASE_BIT: u8 = 0x20;
 
-// CStr is the easiest way to deal with C-style strings in Rust. Here we will take in the xor'd string
+// &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the xor'd string
 // as bytes, a CString from the place in memory we are searching, and the key. Do the same as the
 // wide string version, without the casts. This way we can compare the strings without allocating and
 // xoring memory.
@@ -264,7 +264,73 @@ pub fn compare_xor_c_str_and_c_str_bytes(
         }
 
         val ^= key[i];
-        if val ^ xor_c_string[i] != 0 {
+        if val != xor_c_string[i] {
+            return false;
+        }
+    }
+
+    true
+}
+
+// &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the two
+// strings as &[u8] and &[u16], and will compare them u16 by u16 after casting the u8 to u16.
+// You will want to use this with any string embedded in the resource, as they are all lowercase.
+pub fn compare_c_str_and_w_str_bytes(
+    first_c_string_bytes: &[u8],
+    second_c_string_bytes: &[u16],
+    case_insensitive: bool,
+) -> bool {
+    if first_c_string_bytes.len() != second_c_string_bytes.len() {
+        return false;
+    }
+
+    for i in 0..first_c_string_bytes.len() {
+        let mut val = first_c_string_bytes[i] as u16;
+        let mut val2 = second_c_string_bytes[i];
+
+        if case_insensitive {
+            if val >= 0x41 && val <= 0x5A {
+                val ^= CASE_BIT as u16
+            }
+            if val2 >= 0x41 && val2 <= 0x5A {
+                val2 ^= CASE_BIT as u16
+            }
+        }
+
+        if val != val2 {
+            return false;
+        }
+    }
+
+    true
+}
+
+// &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the two
+// strings as &[u8], and will compare them byte by byte. You will want to use this with any string embedded in the
+// resource, as they are all lowercase.
+pub fn compare_c_str_and_c_str_bytes(
+    first_c_string_bytes: &[u8],
+    second_c_string_bytes: &[u8],
+    case_insensitive: bool,
+) -> bool {
+    if first_c_string_bytes.len() != second_c_string_bytes.len() {
+        return false;
+    }
+
+    for i in 0..first_c_string_bytes.len() {
+        let mut val = first_c_string_bytes[i];
+        let mut val2 = second_c_string_bytes[i];
+
+        if case_insensitive {
+            if val >= 0x41 && val <= 0x5A {
+                val ^= CASE_BIT
+            }
+            if val2 >= 0x41 && val2 <= 0x5A {
+                val2 ^= CASE_BIT
+            }
+        }
+
+        if val != val2 {
             return false;
         }
     }
@@ -291,10 +357,20 @@ pub fn compare_xor_c_str_and_w_str_bytes(
             w_val ^= CASE_BIT as u16;
         }
         w_val ^= key[i] as u16;
-        if w_val ^ xor_c_string[i] as u16 != 0 {
+        if w_val != xor_c_string[i] as u16 {
             return false;
         }
     }
 
     true
+}
+
+pub unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
+    let total_size = size_of::<T>() * len;
+    let src_slice = std::slice::from_raw_parts(src as *const u8, total_size);
+    let dst_slice = std::slice::from_raw_parts_mut(dst as *mut u8, total_size);
+
+    for i in 0..total_size {
+        dst_slice[i] = src_slice[i];
+    }
 }

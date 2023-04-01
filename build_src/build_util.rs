@@ -192,21 +192,6 @@ fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     }
 }
 
-fn get_padding(slice: &[u8]) -> usize {
-    if slice.is_empty() {
-        return 0;
-    }
-
-    let pad = slice[slice.len() - 1];
-    for b in slice.iter().rev().take(pad as usize) {
-        if b != &pad {
-            return 0;
-        }
-    }
-
-    pad as usize
-}
-
 #[allow(non_snake_case)]
 pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
@@ -271,6 +256,21 @@ pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
 
         payload
     }
+}
+
+fn get_padding(slice: &[u8]) -> usize {
+    if slice.is_empty() {
+        return 0;
+    }
+
+    let pad = slice[slice.len() - 1];
+    for b in slice.iter().rev().take(pad as usize) {
+        if b != &pad {
+            return 0;
+        }
+    }
+
+    pad as usize
 }
 
 fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {

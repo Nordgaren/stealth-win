@@ -18,7 +18,7 @@ pub unsafe fn ImageDirectoryEntryToDataEx(
 ) -> usize {
     let imageDirectoryEntryToDataEx: FnImageDirectoryEntryToDataEx =
         std::mem::transmute(GetProcAddressInternal(
-            GetModuleHandleInternal("dbghelp.dll".as_bytes().to_vec()),
+            GetModuleHandleInternal("dbghelp.dll".as_bytes()),
             "ImageDirectoryEntryToDataEx".as_bytes(),
         ));
 

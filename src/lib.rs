@@ -6,7 +6,7 @@ pub mod consts;
 pub mod crypto_util;
 pub mod util;
 pub mod windows;
-mod svec;
+pub mod svec;
 
 use crate::consts::*;
 use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
@@ -32,7 +32,9 @@ mod tests {
     #[test]
     fn get_module_handle() {
         unsafe {
-            let kernel32 = GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec());
+            let kek = "KERNEL32.DLL".encode_utf16().collect::<Vec<u16>>();
+            let lol ="KERNEL32.DLL".encode_utf16().zip(kek.as_slice()).all(|(a, b)| a == *b);
+            let kernel32 = GetModuleHandleInternal("KERNEL32.DLL".as_bytes());
             assert_ne!(kernel32, 0)
         }
     }
@@ -41,7 +43,7 @@ mod tests {
     fn get_proc_address() {
         unsafe {
             let load_library_a_addr = GetProcAddressInternal(
-                GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
+                GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
                 "LoadLibraryA".as_bytes(),
             );
             assert_ne!(load_library_a_addr, 0)
@@ -54,11 +56,11 @@ mod tests {
     // fn get_proc_address_by_ordinal() {
     //     unsafe {
     //         let load_library_a_address_ordinal = GetProcAddressInternal(
-    //             GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+    //             GetModuleHandle("KERNEL32.DLL".as_bytes()),
     //             &[0xC9, 0x03, 0x00, 0x00],
     //         );
     //         let load_library_a_address = GetProcAddressInternal(
-    //             GetModuleHandle("KERNEL32.DLL".as_bytes().to_vec()),
+    //             GetModuleHandle("KERNEL32.DLL".as_bytes()),
     //             "LoadLibraryA".as_bytes(),
     //         );
     //         let load_library: LoadLibraryA = mem::transmute(load_library_a_address_ordinal);
@@ -73,7 +75,7 @@ mod tests {
     fn get_fwd_proc_address() {
         unsafe {
             let pWideCharToMultiByte = GetProcAddressInternal(
-                GetModuleHandleInternal("KERNEL32.DLL".as_bytes().to_vec()),
+                GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
                 "AcquireSRWLockExclusive".as_bytes(),
             );
             assert_ne!(pWideCharToMultiByte, 0)
@@ -110,7 +112,7 @@ mod tests {
         unsafe {
             let kernel32 =
                 get_xor_encrypted_bytes(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN);
-            assert_eq!(&kernel32[..], "kernel32.dll".as_bytes())
+            assert_eq!(kernel32.as_slice(), "kernel32.dll".as_bytes())
         }
     }
 

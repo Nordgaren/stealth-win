@@ -1,11 +1,15 @@
-use std::{cmp, mem, ptr};
+use crate::util::copy_buffer;
+use crate::windows::kernel32::{
+    VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
+};
+use crate::windows::user32::MessageBoxA;
 use std::alloc::Layout;
-use std::fmt::{Display, Formatter, LowerHex, UpperHex};
+use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use std::mem::size_of;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, RangeFrom};
 use std::ptr::NonNull;
 use std::slice::SliceIndex;
-use crate::windows::kernel32::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualAlloc, VirtualFree};
+use std::{cmp, fmt, mem, ptr};
 
 pub struct SVec<T> {
     ptr: NonNull<T>,
@@ -13,28 +17,52 @@ pub struct SVec<T> {
     len: usize,
 }
 
-impl<T> Display for SVec<T> where T: Display,  T: UpperHex, T: LowerHex {
+const BACKSPACE: u8 = 8;
+
+impl<T> Display for SVec<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[ ");
-        for i in 0..self.len() {
-            write!(f, "{}, ", self[i]);
-        }
-        write!(f, "{}{} ]\n", 8u8 as char, 8u8 as char);
+        write!(f, "{:?}", self.as_slice());
         Ok(())
     }
 }
 
-impl<T, Idx> Index<Idx> for SVec<T> where Idx: SliceIndex<[T], Output = T> {
-    type Output = T;
-
-    fn index(&self, index: Idx) -> &Self::Output {
-        &self.as_slice()[index]
+impl<T> UpperHex for SVec<T>
+where
+    T: UpperHex,
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:X?}", self.as_slice());
+        Ok(())
     }
 }
 
-impl<T, Idx> IndexMut<Idx> for SVec<T> where Idx: SliceIndex<[T], Output = T>  {
+impl<T> LowerHex for SVec<T>
+where
+    T: LowerHex,
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x?}", self.as_slice());
+        Ok(())
+    }
+}
+
+impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
+    type Output = Idx::Output;
+    #[inline]
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.as_slice().index(index)
+    }
+}
+
+impl<T, Idx: SliceIndex<[T]>> IndexMut<Idx> for SVec<T> {
+    #[inline]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        &mut self.as_mut_slice()[index]
+        self.as_mut_slice().index_mut(index)
     }
 }
 
@@ -42,29 +70,27 @@ pub trait ToSVec<T> {
     fn to_svec(&self) -> SVec<T>;
 }
 
-impl<T> ToSVec<T> for &[T] where T: Sized {
+impl<T> ToSVec<T> for [T]
+where
+    T: Sized,
+{
     fn to_svec(&self) -> SVec<T> {
-        let mut svec = SVec::new();
-        svec.grow(self.len());
-        let slice = svec.as_mut_slice();
+        let mut svec = SVec::with_capacity(self.len());
 
-        for i in 0..self.len() {
-            unsafe {
-                slice[i] = ptr::read(self.as_ptr().add(i));
-            }
+        unsafe {
+            copy_buffer(self.as_ptr(), svec.as_mut_ptr(), self.len());
+            svec.set_len(self.len());
         }
-        svec.len = self.len();
+
         svec
     }
 }
 
 impl<T> Drop for SVec<T> {
     fn drop(&mut self) {
-        let ptr = self.ptr.as_ptr();
         unsafe {
-            VirtualFree(ptr as usize, 0, MEM_RELEASE);
-            #[cfg(test)]
-            println!("Dropping SVec: {:X}", ptr as usize);
+            ptr::drop_in_place(ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), self.len));
+            VirtualFree(self.ptr.as_ptr() as usize, 0, MEM_RELEASE);
         }
     }
 }
@@ -89,6 +115,11 @@ impl<T> SVec<T> {
             cap: 0,
             len: 0,
         }
+    }
+    pub fn with_capacity(size: usize) -> Self {
+        let mut svec = SVec::new();
+        svec.grow(size);
+        svec
     }
     pub fn push(&mut self, value: T) {
         if self.cap == self.len {
@@ -117,38 +148,62 @@ impl<T> SVec<T> {
             panic!("Cannot grow zero sized types")
         }
 
-        let required_cap = self.len.checked_add(additional).expect(&format!("Could not grow len: {:X} additional: {:X}", self.len, additional));
+        // For some reason, self.len.checked_add(additional) causes a crash if you are working in an unmapped PE.
+        // Handle everything here, instead of bubbling up one function, like in Vec.
+        let required_cap = self.len + additional;
 
-        let cap = cmp::max(self.cap * 2, required_cap);
-        let cap = cmp::max(Self::MIN_NON_ZERO_CAP, cap);
-        let new_layout = Layout::array::<T>(cap).expect("Could not get layout.");
-        let tmp = self.ptr.as_ptr();
+        let new_cap = cmp::max(self.cap * 2, required_cap);
+        let new_cap = cmp::max(Self::MIN_NON_ZERO_CAP, new_cap);
+        let new_layout = Layout::array::<T>(new_cap).expect("Could not get layout.");
+        let tmp = self.as_ptr();
 
         unsafe {
-            let ptr = VirtualAlloc(0, new_layout.size(), MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            let ptr = VirtualAlloc(
+                0,
+                new_layout.size(),
+                MEM_RESERVE | MEM_COMMIT,
+                PAGE_EXECUTE_READWRITE,
+            );
             self.ptr = NonNull::new(ptr as *mut T).expect("Could not allocate memory!");
-            copy_buffer(tmp, ptr as *mut T, self.len);
+            copy_buffer(tmp, self.as_mut_ptr(), self.len());
             if !tmp.is_null() {
                 VirtualFree(tmp as usize, 0, MEM_RELEASE);
             }
         }
-        self.cap = cap;
+        self.cap = new_cap;
     }
-    fn as_ptr(&self) -> *const T {
+    pub fn truncate(&mut self, len: usize) {
+        unsafe {
+            if len > self.len {
+                return;
+            }
+            let remaining_len = self.len - len;
+            let s = ptr::slice_from_raw_parts_mut(self.as_mut_ptr().add(len), remaining_len);
+            self.len = len;
+            ptr::drop_in_place(s);
+        }
+    }
+    pub unsafe fn set_len(&mut self, new_len: usize) {
+        assert!(
+            new_len <= self.capacity(),
+            "Cannot set length({:X}) above capacity ({:X})",
+            new_len,
+            self.capacity()
+        );
+
+        self.len = new_len;
+    }
+    pub fn as_ptr(&self) -> *const T {
         self.ptr.as_ptr()
     }
-    fn as_mut_ptr(&self) -> *mut T {
+    pub fn as_mut_ptr(&self) -> *mut T {
         self.ptr.as_ptr()
     }
     pub fn as_slice(&self) -> &[T] {
-        unsafe {
-            std::slice::from_raw_parts(self.as_ptr(), self.capacity())
-        }
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
     pub fn as_mut_slice(&self) -> &mut [T] {
-        unsafe {
-            std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.capacity())
-        }
+        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
     pub fn len(&self) -> usize {
         self.len
@@ -158,26 +213,25 @@ impl<T> SVec<T> {
     }
 }
 
-unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
-    let total_size = size_of::<T>() * len;
-    let src_slice = std::slice::from_raw_parts(src as *const u8, total_size);
-    let dst_slice = std::slice::from_raw_parts_mut(dst as *mut u8, total_size);
+struct DropTest(&'static mut i32);
 
-    for i in 0..total_size {
-        dst_slice[i] = src_slice[i];
+impl Drop for DropTest {
+    fn drop(&mut self) {
+        println!("Dropping {:X}", self.0);
+        *self.0 -= 1;
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::svec::SVec;
+    use crate::svec::{DropTest, SVec, ToSVec};
 
     #[test]
     fn test_svec() {
         unsafe {
             let mut svec = SVec::new();
             svec.push(0);
+            assert_eq!(svec.len(), 1);
         }
     }
 
@@ -188,37 +242,132 @@ mod tests {
             assert_eq!(svec.capacity(), 0);
             svec.push(1);
             assert_eq!(svec.capacity(), 4);
-            svec.push(69);
-            svec.push(420);
             svec.push(2);
-            assert_eq!(svec.capacity(), 4);
             svec.push(3);
+            svec.push(4);
+            assert_eq!(svec.capacity(), 4);
+            svec.push(5);
             assert_eq!(svec.capacity(), 8);
-            println!("{}", svec)
         }
-    }
-
-    fn drop_vec() {
-        let svec: SVec<u32> = SVec::new();
-    }
-
-    #[test]
-    fn test_drop() {
-        drop_vec();
     }
 
     #[test]
     fn index() {
         let mut svec = SVec::new();
-        svec.push(420);
-        println!("420 in hex: {:X}", svec[0]);
+        svec.push(0x1000);
+        assert_eq!(svec[0], 0x1000);
     }
 
     #[test]
     fn index_mut() {
         let mut svec = SVec::new();
-        svec.push(420);
-        svec[0] = 69;
-        println!("69 in hex: {:X}", svec[0]);
+        svec.push(0x1000);
+        svec[0] = 0x2000;
+        assert_eq!(svec[0], 0x2000);
+    }
+
+    #[test]
+    fn slices() {
+        let mut svec = SVec::new();
+        svec.push(1);
+        svec.push(2);
+        svec.push(3);
+        svec.push(4);
+        svec.push(5);
+        let indexed_slice = &svec[1..];
+        assert_eq!(indexed_slice, [2, 3, 4, 5]);
+    }
+
+    static mut COUNT: i32 = 0;
+
+    fn drop_test_function_call() {
+        let mut svec = SVec::new();
+        unsafe {
+            COUNT = 16;
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+        }
+    }
+
+    #[test]
+    fn drop_test() {
+        drop_test_function_call();
+        unsafe {
+            assert_eq!(COUNT, 0);
+        }
+    }
+
+    #[test]
+    fn truncate_test() {
+        let mut svec = SVec::new();
+        unsafe {
+            COUNT = 6;
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(&mut COUNT));
+            println!("Truncating");
+            svec.truncate(3);
+            assert_eq!(svec.len(), 3);
+            assert_eq!(COUNT, 3);
+        }
+    }
+
+    #[test]
+    fn formatting_test() {
+        let mut svec = SVec::new();
+        svec.push(0);
+        svec.push(1);
+        svec.push(2);
+        svec.push(3);
+        svec.push(4);
+        svec.push(5);
+        svec.push(6);
+        svec.push(7);
+        svec.push(8);
+        svec.push(9);
+        svec.push(10);
+        svec.push(11);
+        svec.push(12);
+        svec.push(13);
+        svec.push(14);
+        svec.push(15);
+        assert_eq!(
+            format!("{:X}", svec),
+            format!(
+                "{:X?}",
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            )
+        );
+        assert_eq!(
+            format!("{:x}", svec),
+            format!(
+                "{:x?}",
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            )
+        );
+        assert_eq!(
+            format!("{}", svec),
+            format!(
+                "{:?}",
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            )
+        );
     }
 }

