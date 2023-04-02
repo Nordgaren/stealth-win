@@ -4,9 +4,9 @@
 
 pub mod consts;
 pub mod crypto_util;
+pub mod svec;
 pub mod util;
 pub mod windows;
-pub mod svec;
 
 #[cfg(test)]
 mod tests {
@@ -27,8 +27,6 @@ mod tests {
     #[test]
     fn get_module_handle() {
         unsafe {
-            let kek = "KERNEL32.DLL".encode_utf16().collect::<Vec<u16>>();
-            let lol ="KERNEL32.DLL".encode_utf16().zip(kek.as_slice()).all(|(a, b)| a == *b);
             let kernel32 = GetModuleHandleInternal("KERNEL32.DLL".as_bytes());
             assert_ne!(kernel32, 0)
         }

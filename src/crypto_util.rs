@@ -2,10 +2,10 @@
 #![allow(unused)]
 
 use crate::consts::*;
+use crate::svec::{SVec, ToSVec};
 use crate::util::get_resource_bytes;
 use crate::windows::advapi::*;
 use std::ptr::addr_of_mut;
-use crate::svec::{SVec, ToSVec};
 
 fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> SVec<u8> {
     unsafe {

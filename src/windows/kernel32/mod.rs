@@ -6,9 +6,8 @@ use crate::consts::*;
 use crate::crypto_util::*;
 use crate::svec::ToSVec;
 use crate::util::{
-    compare_strs_as_bytes, compare_str_and_w_str_bytes,
-    compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, find_pos,
-    get_resource_bytes, strlen,
+    compare_str_and_w_str_bytes, compare_strs_as_bytes, compare_xor_str_and_str_bytes,
+    compare_xor_str_and_w_str_bytes, find_pos, get_resource_bytes, strlen,
 };
 #[cfg(test)]
 use crate::windows::apiset::API_SET_NAMESPACE_V6;

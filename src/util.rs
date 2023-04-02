@@ -32,7 +32,8 @@ pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'stat
 
 unsafe fn check_mapped(base_address: usize) -> bool {
     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
-    let first_section: &IMAGE_SECTION_HEADER = mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
+    let first_section: &IMAGE_SECTION_HEADER =
+        mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
     let section_on_disk = base_address + first_section.PointerToRawData as usize;
 
     return *(section_on_disk as *const u64) == 0;
@@ -52,7 +53,7 @@ unsafe fn get_resource_mapped(base_address: usize, resource_id: u32) -> &'static
     std::slice::from_raw_parts(data as *const u8, resource_data_entry.DataSize as usize)
 }
 
-unsafe fn get_resource_unmapped(base_address: usize,resource_id: u32) -> &'static [u8] {
+unsafe fn get_resource_unmapped(base_address: usize, resource_id: u32) -> &'static [u8] {
     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
     let nt_header: &IMAGE_NT_HEADERS = mem::transmute(base_address + dos_header.e_lfanew as usize);
     let optional_header = &nt_header.OptionalHeader;
@@ -87,21 +88,27 @@ unsafe fn get_resource_data_entry(
         mem::transmute(addr_of!(*resource_directory_table) as usize + offset as usize);
     let resource_directory_table_lang_entries =
         addr_of!(*resource_directory_table_lang) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let resource_directory_table_lang_entry: &IMAGE_RESOURCE_DIRECTORY_ENTRY = mem::transmute(resource_directory_table_lang_entries);
+    let resource_directory_table_lang_entry: &IMAGE_RESOURCE_DIRECTORY_ENTRY =
+        mem::transmute(resource_directory_table_lang_entries);
     let offset = resource_directory_table_lang_entry.OffsetToData;
 
     mem::transmute(addr_of!(*resource_directory_table) as usize + offset as usize)
 }
 
-unsafe fn get_entry_offset_by_id(resource_directory_table: &RESOURCE_DIRECTORY_TABLE, id: u32) -> u32 {
+unsafe fn get_entry_offset_by_id(
+    resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
+    id: u32,
+) -> u32 {
     let resource_entries_address =
         addr_of!(*resource_directory_table) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
     let resource_directory_entires = std::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
-        (resource_directory_table.NumberOfNameEntries + resource_directory_table.NumberOfIDEntries) as usize,
+        (resource_directory_table.NumberOfNameEntries + resource_directory_table.NumberOfIDEntries)
+            as usize,
     );
 
-    for i in resource_directory_table.NumberOfNameEntries as usize..resource_directory_entires.len() {
+    for i in resource_directory_table.NumberOfNameEntries as usize..resource_directory_entires.len()
+    {
         if resource_directory_entires[i].Name == id {
             return resource_directory_entires[i].OffsetToData;
         }
@@ -110,12 +117,16 @@ unsafe fn get_entry_offset_by_id(resource_directory_table: &RESOURCE_DIRECTORY_T
     0
 }
 
-unsafe fn get_entry_offset_by_name(resource_directory_table: &RESOURCE_DIRECTORY_TABLE, id: u32) -> u32 {
+unsafe fn get_entry_offset_by_name(
+    resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
+    id: u32,
+) -> u32 {
     let resource_entries_address =
         addr_of!(*resource_directory_table) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
     let resource_directory_entires = std::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
-        (resource_directory_table.NumberOfNameEntries + resource_directory_table.NumberOfIDEntries) as usize,
+        (resource_directory_table.NumberOfNameEntries + resource_directory_table.NumberOfIDEntries)
+            as usize,
     );
 
     for i in 0..resource_directory_table.NumberOfNameEntries as usize {
@@ -228,7 +239,7 @@ pub fn find_pos(string: &[u8], char: u8) -> usize {
     usize::MAX
 }
 
-// Need internal function for this in unmapped PE state.  
+// Need internal function for this in unmapped PE state.
 pub const fn strlen(s: *const u8) -> usize {
     let mut len = 0;
     while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {

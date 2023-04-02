@@ -96,7 +96,10 @@ impl<T> SVec<T> {
         }
         self.cap = new_cap;
     }
-    pub fn resize(&mut self, new_len: usize, value: T) where T: Clone {
+    pub fn resize(&mut self, new_len: usize, value: T)
+    where
+        T: Clone,
+    {
         let len = self.len();
 
         if new_len > len {
@@ -105,7 +108,10 @@ impl<T> SVec<T> {
             self.truncate(new_len);
         }
     }
-    pub fn extend_with(&mut self, n: usize,  value: T) where T: Clone {
+    pub fn extend_with(&mut self, n: usize, value: T)
+    where
+        T: Clone,
+    {
         self.grow(self.len() + n);
         let old_size = self.len;
         self.len = self.len() + n;
@@ -113,7 +119,6 @@ impl<T> SVec<T> {
         for i in old_size..self.len() {
             self[i] = value.clone();
         }
-
     }
     pub fn truncate(&mut self, len: usize) {
         unsafe {
@@ -163,8 +168,8 @@ impl<T> SVec<T> {
     }
 }
 impl<T> Display for SVec<T>
-    where
-        T: Debug,
+where
+    T: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.as_slice());
@@ -172,9 +177,9 @@ impl<T> Display for SVec<T>
     }
 }
 impl<T> UpperHex for SVec<T>
-    where
-        T: UpperHex,
-        T: Debug,
+where
+    T: UpperHex,
+    T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:X?}", self.as_slice());
@@ -182,9 +187,9 @@ impl<T> UpperHex for SVec<T>
     }
 }
 impl<T> LowerHex for SVec<T>
-    where
-        T: LowerHex,
-        T: Debug,
+where
+    T: LowerHex,
+    T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x?}", self.as_slice());
@@ -208,8 +213,8 @@ pub trait ToSVec<T> {
     fn to_svec(&self) -> SVec<T>;
 }
 impl<T> ToSVec<T> for [T]
-    where
-        T: Sized,
+where
+    T: Sized,
 {
     fn to_svec(&self) -> SVec<T> {
         let mut svec = SVec::with_capacity(self.len());
@@ -394,12 +399,12 @@ mod tests {
         let mut svec = SVec::new();
         svec.push(0);
         svec.resize(10, 9);
-        assert_eq!(&svec[1..], [9;9])
+        assert_eq!(&svec[1..], [9; 9])
     }
     #[test]
     fn resize_shrink() {
         let mut svec = SVec::with_capacity(15);
         svec.resize(10, 0);
-        assert_eq!(&svec[..], [0;10])
+        assert_eq!(&svec[..], [0; 10])
     }
 }
