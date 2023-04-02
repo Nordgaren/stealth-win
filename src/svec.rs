@@ -31,6 +31,7 @@ impl<T> SVec<T> {
     } else {
         1
     };
+    #[inline]
     pub fn new() -> Self {
         SVec {
             ptr: NonNull::dangling(),
@@ -38,11 +39,13 @@ impl<T> SVec<T> {
             len: 0,
         }
     }
+    #[inline]
     pub fn with_capacity(size: usize) -> Self {
         let mut svec = SVec::new();
         svec.grow(size);
         svec
     }
+    #[inline]
     pub fn push(&mut self, value: T) {
         if self.cap == self.len {
             self.grow(1);
@@ -53,6 +56,7 @@ impl<T> SVec<T> {
             self.len += 1;
         }
     }
+    #[inline]
     pub fn pop(&mut self) -> Option<T> {
         if self.len == 0 {
             None
@@ -64,8 +68,6 @@ impl<T> SVec<T> {
         }
     }
     fn grow(&mut self, additional: usize) {
-        debug_assert!(additional > 0);
-
         if size_of::<T>() == 0 {
             panic!("Cannot grow zero sized types")
         }
@@ -94,6 +96,25 @@ impl<T> SVec<T> {
         }
         self.cap = new_cap;
     }
+    pub fn resize(&mut self, new_len: usize, value: T) where T: Clone {
+        let len = self.len();
+
+        if new_len > len {
+            self.extend_with(new_len - len, value)
+        } else {
+            self.truncate(new_len);
+        }
+    }
+    pub fn extend_with(&mut self, n: usize,  value: T) where T: Clone {
+        self.grow(self.len() + n);
+        let old_size = self.len;
+        self.len = self.len() + n;
+
+        for i in old_size..self.len() {
+            self[i] = value.clone();
+        }
+
+    }
     pub fn truncate(&mut self, len: usize) {
         unsafe {
             if len > self.len {
@@ -105,6 +126,7 @@ impl<T> SVec<T> {
             ptr::drop_in_place(s);
         }
     }
+    #[inline]
     pub unsafe fn set_len(&mut self, new_len: usize) {
         assert!(
             new_len <= self.capacity(),
@@ -115,26 +137,31 @@ impl<T> SVec<T> {
 
         self.len = new_len;
     }
+    #[inline]
     pub fn as_ptr(&self) -> *const T {
         self.ptr.as_ptr()
     }
+    #[inline]
     pub fn as_mut_ptr(&self) -> *mut T {
         self.ptr.as_ptr()
     }
+    #[inline]
     pub fn as_slice(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
+    #[inline]
     pub fn as_mut_slice(&self) -> &mut [T] {
         unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
+    #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.cap
     }
 }
-
 impl<T> Display for SVec<T>
     where
         T: Debug,
@@ -144,7 +171,6 @@ impl<T> Display for SVec<T>
         Ok(())
     }
 }
-
 impl<T> UpperHex for SVec<T>
     where
         T: UpperHex,
@@ -155,7 +181,6 @@ impl<T> UpperHex for SVec<T>
         Ok(())
     }
 }
-
 impl<T> LowerHex for SVec<T>
     where
         T: LowerHex,
@@ -166,7 +191,6 @@ impl<T> LowerHex for SVec<T>
         Ok(())
     }
 }
-
 impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
     type Output = Idx::Output;
     #[inline]
@@ -174,18 +198,15 @@ impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
         &self.as_slice().index(index)
     }
 }
-
 impl<T, Idx: SliceIndex<[T]>> IndexMut<Idx> for SVec<T> {
     #[inline]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         self.as_mut_slice().index_mut(index)
     }
 }
-
 pub trait ToSVec<T> {
     fn to_svec(&self) -> SVec<T>;
 }
-
 impl<T> ToSVec<T> for [T]
     where
         T: Sized,
@@ -367,5 +388,18 @@ mod tests {
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             )
         );
+    }
+    #[test]
+    fn resize_grow() {
+        let mut svec = SVec::new();
+        svec.push(0);
+        svec.resize(10, 9);
+        assert_eq!(&svec[1..], [9;9])
+    }
+    #[test]
+    fn resize_shrink() {
+        let mut svec = SVec::with_capacity(15);
+        svec.resize(10, 0);
+        assert_eq!(&svec[..], [0;10])
     }
 }

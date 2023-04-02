@@ -80,7 +80,7 @@ fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> SVec<u8> {
     }
 }
 
-pub fn aes_decrypt_bytes(bytes: &mut [u8], key: &[u8], iv: &[u8]) {
+pub fn aes_decrypt_bytes(bytes: &mut [u8], key: &[u8], iv: &[u8]) -> usize {
     unsafe {
         let mut hProv = 0;
         if !CryptAcquireContextW(
@@ -120,10 +120,7 @@ pub fn aes_decrypt_bytes(bytes: &mut [u8], key: &[u8], iv: &[u8]) {
         CryptDestroyHash(hHash);
         CryptDestroyKey(hKey);
 
-        let pad = get_padding(&bytes[..]);
-        if pad > 0 {
-            bytes.truncate(bytes.len() - pad);
-        }
+        get_padding(bytes)
     }
 }
 
@@ -131,7 +128,10 @@ pub fn get_aes_encrypted_resource_bytes(offset: usize, len: usize) -> SVec<u8> {
     let key = get_resource_bytes(RESOURCE_ID, AES_KEY_POS, AES_KEY_LEN);
     let iv = get_resource_bytes(RESOURCE_ID, AES_IV_POS, AES_IV_LEN);
     let mut resource = get_resource_bytes(RESOURCE_ID, offset, len).to_svec();
-    aes_decrypt_bytes(resource.as_mut_slice(), key, iv);
+    let pad = aes_decrypt_bytes(resource.as_mut_slice(), key, iv);
+    if pad > 0 {
+        resource.truncate(resource.len() - pad);
+    }
 
     resource
 }
