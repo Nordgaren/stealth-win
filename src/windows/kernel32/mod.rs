@@ -601,8 +601,10 @@ unsafe fn get_fwd_addr(pProcAddr: usize) -> usize {
             .to_svec();
 
     let szSplitPos = match find_char(&sFwdDll[..], '.' as u8) {
-        None => { return 0; }
-        Some(sz) => {sz}
+        None => {
+            return 0;
+        }
+        Some(sz) => sz,
     };
 
     sFwdDll[szSplitPos] = 0;

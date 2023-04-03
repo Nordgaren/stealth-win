@@ -1,10 +1,14 @@
+use crate::build_src::build_config::{
+    DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, STRINGS, TARGET_PROCESS,
+};
+use crate::build_src::build_util::{
+    aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, xor_encrypt_bytes,
+};
 use rand;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::{env, fs};
 use winresource::WindowsResource;
-use crate::build_src::build_config::{DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, TARGET_PROCESS, STRINGS};
-use crate::build_src::build_util::{aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, xor_encrypt_bytes};
 
 type BuildFn = fn(&mut ResourceGenerator, &mut Vec<u8>);
 
@@ -274,14 +278,14 @@ impl ResourceGenerator {
             format!("{}/resources.h", self.out_dir),
             format!("#define PAYLOAD_ID {}\n", RESOURCE_ID),
         )
-            .expect("Could not write resources.h file.");
+        .expect("Could not write resources.h file.");
 
         fs::write(
             format!("{}/resources.rc", self.out_dir),
-        format!(
-            "#include \"resources.h\"\nPAYLOAD_ID RCDATA {}\n",
-            RESOURCE_NAME
-        ),
+            format!(
+                "#include \"resources.h\"\nPAYLOAD_ID RCDATA {}\n",
+                RESOURCE_NAME
+            ),
         )
         .expect("Could not write resources.rc file.");
     }

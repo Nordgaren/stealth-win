@@ -8,14 +8,13 @@ pub mod svec;
 pub mod util;
 pub mod windows;
 
-
 #[cfg(test)]
 mod tests {
     use crate::consts::{
         KERNEL32_DLL_KEY, KERNEL32_DLL_LEN, KERNEL32_DLL_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN,
         LOADLIBRARYA_POS, RESOURCE_ID, USER32_DLL_LEN, USER32_DLL_POS,
     };
-    use crate::crypto_util::{get_xor_encrypted_bytes};
+    use crate::crypto_util::get_xor_encrypted_bytes;
     use crate::util::{get_dll_base, get_resource_bytes, get_return_address};
     use crate::windows::kernel32::{
         get_peb, GetModuleHandleA, GetModuleHandleInternal, GetModuleHandleX, GetProcAddress,
