@@ -6,7 +6,6 @@ use crate::consts::*;
 use std::arch::global_asm;
 use std::ffi::CStr;
 use std::mem;
-//use std::fs;
 use crate::windows::kernel32::MAX_PATH;
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
@@ -25,8 +24,8 @@ pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'stat
             get_resource_unmapped(base_address, resource_id)
         }
     };
-    let end = offset + len;
 
+    let end = offset + len;
     &resource[offset..end]
 }
 
@@ -35,8 +34,9 @@ unsafe fn check_mapped(base_address: usize) -> bool {
     let first_section: &IMAGE_SECTION_HEADER =
         mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
     let section_on_disk = base_address + first_section.PointerToRawData as usize;
+    let ptr_to_zero = section_on_disk as *const u64;
 
-    return *(section_on_disk as *const u64) == 0;
+    *ptr_to_zero == 0
 }
 
 unsafe fn get_resource_mapped(base_address: usize, resource_id: u32) -> &'static [u8] {
@@ -73,44 +73,47 @@ unsafe fn get_resource_data_entry(
     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
     resource_id: u32,
 ) -> &'static RESOURCE_DATA_ENTRY {
+    let resource_directory_table_addr = addr_of!(*resource_directory_table) as usize;
+
     //level 1: Resource type directory
     let mut offset = get_entry_offset_by_id(resource_directory_table, RT_RCDATA as u32);
     offset &= 0x7FFFFFFF;
 
     //level 2: Resource Name/ID subdirectory
     let resource_directory_table_name_id: &RESOURCE_DIRECTORY_TABLE =
-        mem::transmute(addr_of!(*resource_directory_table) as usize + offset as usize);
+        mem::transmute(resource_directory_table_addr + offset as usize);
     let mut offset = get_entry_offset_by_id(resource_directory_table_name_id, resource_id);
     offset &= 0x7FFFFFFF;
 
     //level 3: language subdirectory - just use the first entry.
     let resource_directory_table_lang: &RESOURCE_DIRECTORY_TABLE =
-        mem::transmute(addr_of!(*resource_directory_table) as usize + offset as usize);
+        mem::transmute(resource_directory_table_addr as usize + offset as usize);
     let resource_directory_table_lang_entries =
         addr_of!(*resource_directory_table_lang) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
     let resource_directory_table_lang_entry: &IMAGE_RESOURCE_DIRECTORY_ENTRY =
         mem::transmute(resource_directory_table_lang_entries);
     let offset = resource_directory_table_lang_entry.OffsetToData;
 
-    mem::transmute(addr_of!(*resource_directory_table) as usize + offset as usize)
+    mem::transmute(resource_directory_table_addr as usize + offset as usize)
 }
 
 unsafe fn get_entry_offset_by_id(
     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
     id: u32,
 ) -> u32 {
-    let resource_entries_address =
-        addr_of!(*resource_directory_table) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let resource_directory_entires = std::slice::from_raw_parts(
+    // We have to skip the Name entries, here, to iterate over the entires by Id.
+    let resource_entries_address = addr_of!(*resource_directory_table) as usize
+        + size_of::<RESOURCE_DIRECTORY_TABLE>()
+        + (size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>()
+            * resource_directory_table.NumberOfNameEntries as usize);
+    let resource_directory_entries = std::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
-        (resource_directory_table.NumberOfNameEntries + resource_directory_table.NumberOfIDEntries)
-            as usize,
+        resource_directory_table.NumberOfIDEntries as usize,
     );
 
-    for i in resource_directory_table.NumberOfNameEntries as usize..resource_directory_entires.len()
-    {
-        if resource_directory_entires[i].Name == id {
-            return resource_directory_entires[i].OffsetToData;
+    for resource_directory_entry in resource_directory_entries {
+        if resource_directory_entry.Id == id {
+            return resource_directory_entry.OffsetToData;
         }
     }
 
@@ -119,19 +122,22 @@ unsafe fn get_entry_offset_by_id(
 
 unsafe fn get_entry_offset_by_name(
     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
-    id: u32,
+    name: &[u8],
 ) -> u32 {
     let resource_entries_address =
         addr_of!(*resource_directory_table) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let resource_directory_entires = std::slice::from_raw_parts(
+    let resource_directory_entries = std::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
-        (resource_directory_table.NumberOfNameEntries + resource_directory_table.NumberOfIDEntries)
-            as usize,
+        resource_directory_table.NumberOfNameEntries as usize,
     );
 
-    for i in 0..resource_directory_table.NumberOfNameEntries as usize {
-        if resource_directory_entires[i].Name == id {
-            return resource_directory_entires[i].OffsetToData;
+    for resource_directory_entry in resource_directory_entries {
+        let name_ptr =
+            addr_of!(*resource_directory_table) as usize + resource_directory_entry.Id as usize;
+        let resource_name =
+            std::slice::from_raw_parts(name_ptr as *const u8, strlen(name_ptr as *const u8));
+        if resource_name == name {
+            return resource_directory_entry.OffsetToData;
         }
     }
 
@@ -145,10 +151,10 @@ pub unsafe fn get_dll_base() -> usize {
     let mut module_address = get_return_address() & !(PAGE_BOUNDRY - 1);
 
     loop {
-        let pos = module_address as *const u16;
-        if *pos == IMAGE_DOS_SIGNATURE {
-            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(pos);
-            // some x64 dll's can trigger a bogus signature (IMAGE_DOS_SIGNATURE == 'POP r10'),
+        let magic = module_address as *const u16;
+        if *magic == IMAGE_DOS_SIGNATURE {
+            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(magic);
+            // Some x64 dll's can trigger a bogus signature (IMAGE_DOS_SIGNATURE == 'POP r10'),
             // we sanity check the e_lfanew with an upper threshold value of 1024 to avoid problems.
             if dos_header.e_lfanew < 0x400 {
                 // break if we have found a valid MZ/PE header
@@ -198,11 +204,11 @@ unsafe fn rva_to_foa(nt_headers: &IMAGE_NT_HEADERS, rva: u32) -> u32 {
         return rva;
     }
 
-    for i in 0..nt_headers.FileHeader.NumberOfSections as usize {
-        if (rva >= section_headers[i].VirtualAddress)
-            && (rva <= section_headers[i].VirtualAddress + section_headers[i].SizeOfRawData)
+    for section_header in section_headers {
+        if (rva >= section_header.VirtualAddress)
+            && (rva <= section_header.VirtualAddress + section_header.SizeOfRawData)
         {
-            return section_headers[i].PointerToRawData + (rva - section_headers[i].VirtualAddress);
+            return section_header.PointerToRawData + (rva - section_header.VirtualAddress);
         }
     }
 
@@ -230,8 +236,8 @@ pub fn hi_byte(n: usize) -> u8 {
 }
 
 pub fn find_pos(string: &[u8], char: u8) -> usize {
-    for i in 0..string.len() {
-        if string[i] == char {
+    for (i, s) in string.iter().enumerate() {
+        if *s == char {
             return i;
         }
     }
@@ -240,7 +246,7 @@ pub fn find_pos(string: &[u8], char: u8) -> usize {
 }
 
 // Need internal function for this in unmapped PE state.
-pub const fn strlen(s: *const u8) -> usize {
+pub fn strlen(s: *const u8) -> usize {
     let mut len = 0;
     while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {
         len += 1;
@@ -248,8 +254,12 @@ pub const fn strlen(s: *const u8) -> usize {
 
     len
 }
+#[inline(always)]
+pub fn strlen_with_null(s: *const u8) -> usize {
+    strlen(s) + 1
+}
 
-// These two comparison methods were inspired by Jonas
+// These two xor comparison methods were inspired by Jonas @jonasLyk. Thanks for the idea to just use the xor'd strings. :)
 const CASE_BIT: u8 = 0x20;
 
 // &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the xor'd string

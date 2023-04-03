@@ -417,7 +417,6 @@ pub struct ACL {
     pub AceCount: u16,
     pub Sbz2: u16,
 }
-
 extern "C" {
     pub fn get_peb() -> &'static PEB;
 }
@@ -429,7 +428,6 @@ get_peb:
     mov rax, gs:0x60
     ret",
 );
-
 #[cfg(all(windows, target_arch = "x86"))]
 global_asm!(
     r"
@@ -513,13 +511,13 @@ pub unsafe fn GetProcAddressInternal(pBaseAddr: usize, sProcName: &[u8]) -> usiz
     let dwOrdinalTest = *(sProcName.as_ptr() as *const u32);
     if dwOrdinalTest >> 16 == 0 {
         let ordinal = (*(sProcName.as_ptr() as *const u16)) as u32;
-        let Base = pExportDirAddr.Base;
+        let base = pExportDirAddr.Base;
 
-        if (ordinal < Base) || (ordinal >= Base + pExportDirAddr.NumberOfFunctions) {
+        if (ordinal < base) || (ordinal >= base + pExportDirAddr.NumberOfFunctions) {
             return 0;
         }
 
-        pProcAddr = pBaseAddr + sEATArray[(ordinal - Base) as usize] as usize;
+        pProcAddr = pBaseAddr + sEATArray[(ordinal - base) as usize] as usize;
     } else {
         let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
         let sFuncNameTblArray = std::slice::from_raw_parts(
@@ -567,7 +565,7 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorName: &[u8], sKey: &[u8]) ->
     );
 
     // We are only loading by name for this function, so remove the ordinal code.
-    // checking for ordinal can cause false positives
+    // checking for ordinal can cause issues, here.
     let mut pProcAddr = 0;
     let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
     let sFuncNameTblArray = std::slice::from_raw_parts(

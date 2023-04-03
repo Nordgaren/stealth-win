@@ -167,6 +167,7 @@ impl<T> SVec<T> {
         self.cap
     }
 }
+
 impl<T> Display for SVec<T>
 where
     T: Debug,
@@ -176,6 +177,7 @@ where
         Ok(())
     }
 }
+
 impl<T> UpperHex for SVec<T>
 where
     T: UpperHex,
@@ -186,6 +188,7 @@ where
         Ok(())
     }
 }
+
 impl<T> LowerHex for SVec<T>
 where
     T: LowerHex,
@@ -196,6 +199,7 @@ where
         Ok(())
     }
 }
+
 impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
     type Output = Idx::Output;
     #[inline]
@@ -203,15 +207,18 @@ impl<T, Idx: SliceIndex<[T]>> Index<Idx> for SVec<T> {
         &self.as_slice().index(index)
     }
 }
+
 impl<T, Idx: SliceIndex<[T]>> IndexMut<Idx> for SVec<T> {
     #[inline]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         self.as_mut_slice().index_mut(index)
     }
 }
+
 pub trait ToSVec<T> {
     fn to_svec(&self) -> SVec<T>;
 }
+
 impl<T> ToSVec<T> for [T]
 where
     T: Sized,
@@ -241,7 +248,6 @@ struct DropTest(&'static mut i32);
 
 impl Drop for DropTest {
     fn drop(&mut self) {
-        println!("Dropping {:X}", self.0);
         *self.0 -= 1;
     }
 }
@@ -307,7 +313,6 @@ mod tests {
     fn drop_test_function_call() {
         let mut svec = SVec::new();
         unsafe {
-            COUNT = 16;
             svec.push(DropTest(&mut COUNT));
             svec.push(DropTest(&mut COUNT));
             svec.push(DropTest(&mut COUNT));
@@ -329,8 +334,9 @@ mod tests {
 
     #[test]
     fn drop_test() {
-        drop_test_function_call();
         unsafe {
+            COUNT = 16;
+            drop_test_function_call();
             assert_eq!(COUNT, 0);
         }
     }
@@ -346,7 +352,6 @@ mod tests {
             svec.push(DropTest(&mut COUNT));
             svec.push(DropTest(&mut COUNT));
             svec.push(DropTest(&mut COUNT));
-            println!("Truncating");
             svec.truncate(3);
             assert_eq!(svec.len(), 3);
             assert_eq!(COUNT, 3);
@@ -372,28 +377,13 @@ mod tests {
         svec.push(13);
         svec.push(14);
         svec.push(15);
-        assert_eq!(
-            format!("{:X}", svec),
-            format!(
-                "{:X?}",
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-            )
-        );
-        assert_eq!(
-            format!("{:x}", svec),
-            format!(
-                "{:x?}",
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-            )
-        );
-        assert_eq!(
-            format!("{}", svec),
-            format!(
-                "{:?}",
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-            )
-        );
+
+        let dummy_slice = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        assert_eq!(format!("{:X}", svec), format!("{:X?}", dummy_slice));
+        assert_eq!(format!("{:x}", svec), format!("{:x?}", dummy_slice));
+        assert_eq!(format!("{}", svec), format!("{:?}", dummy_slice));
     }
+
     #[test]
     fn resize_grow() {
         let mut svec = SVec::new();
@@ -401,6 +391,7 @@ mod tests {
         svec.resize(10, 9);
         assert_eq!(&svec[1..], [9; 9])
     }
+
     #[test]
     fn resize_shrink() {
         let mut svec = SVec::with_capacity(15);

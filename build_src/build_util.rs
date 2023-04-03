@@ -249,7 +249,7 @@ pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
         CryptDestroyHash(hHash);
         CryptDestroyKey(hKey);
 
-        let pad = get_padding(&payload[..]);
+        let pad = get_aes_padding(&payload[..]);
         if pad > 0 {
             payload.truncate(bytes.len() - pad);
         }
@@ -258,7 +258,7 @@ pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     }
 }
 
-fn get_padding(slice: &[u8]) -> usize {
+fn get_aes_padding(slice: &[u8]) -> usize {
     if slice.is_empty() {
         return 0;
     }
@@ -295,5 +295,12 @@ fn generate_random_bytes(i: usize) -> Vec<u8> {
 fn generate_random_bytes_in_range(i: usize, r: Range<u8>) -> Vec<u8> {
     (0..i)
         .map(|_| rand::thread_rng().gen_range(r.start..r.end))
+        .collect()
+}
+
+#[allow(unused)]
+fn generate_random_bytes_in_range_inclusive(i: usize, r: Range<u8>) -> Vec<u8> {
+    (0..i)
+        .map(|_| rand::thread_rng().gen_range(r.start..=r.end))
         .collect()
 }

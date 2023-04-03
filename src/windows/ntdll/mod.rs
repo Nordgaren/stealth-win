@@ -259,7 +259,7 @@ pub struct RESOURCE_DIRECTORY_TABLE {
 
 #[repr(C)]
 pub struct IMAGE_RESOURCE_DIRECTORY_ENTRY {
-    pub Name: u32,
+    pub Id: u32,
     pub OffsetToData: u32,
 }
 

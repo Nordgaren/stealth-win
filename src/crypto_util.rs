@@ -120,7 +120,7 @@ pub fn aes_decrypt_bytes(bytes: &mut [u8], key: &[u8], iv: &[u8]) -> usize {
         CryptDestroyHash(hHash);
         CryptDestroyKey(hKey);
 
-        get_padding(bytes)
+        get_aes_padding(bytes)
     }
 }
 
@@ -147,7 +147,7 @@ pub fn get_xor_encrypted_bytes(offset: usize, key_offset: usize, len: usize) -> 
     buff
 }
 
-fn get_padding(slice: &[u8]) -> usize {
+fn get_aes_padding(slice: &[u8]) -> usize {
     if slice.is_empty() {
         return 0;
     }
