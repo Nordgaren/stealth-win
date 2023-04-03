@@ -1,10 +1,14 @@
+#![allow(non_snake_case)]
+#![allow(unused)]
+
+use std::ops::Range;
 use std::ptr::addr_of_mut;
+use rand::Rng;
 use windows_sys::core::PCWSTR;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Security::Cryptography::{ALG_CLASS_DATA_ENCRYPT, ALG_CLASS_HASH, ALG_SID_AES_256, ALG_SID_SHA_256, ALG_TYPE_ANY, ALG_TYPE_BLOCK, CRYPT_VERIFYCONTEXT, CryptAcquireContextW, CryptCreateHash, CryptDecrypt, CryptDeriveKey, CryptDestroyHash, CryptDestroyKey, CryptEncrypt, CryptGenKey, CryptGetKeyParam, CryptHashData, CryptReleaseContext, CryptSetKeyParam, KP_BLOCKLEN, KP_IV, KP_KEYLEN, PROV_RSA_AES};
 
-#[allow(non_snake_case)]
-fn get_key_len() -> usize {
+pub fn get_key_len() -> usize {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -62,8 +66,7 @@ fn get_key_len() -> usize {
     }
 }
 
-#[allow(non_snake_case)]
-fn get_iv_len() -> usize {
+pub fn get_iv_len() -> usize {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -114,8 +117,7 @@ fn get_iv_len() -> usize {
     }
 }
 
-#[allow(non_snake_case)]
-fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
+pub fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -192,7 +194,6 @@ fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     }
 }
 
-#[allow(non_snake_case)]
 pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
@@ -258,7 +259,7 @@ pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     }
 }
 
-fn get_aes_padding(slice: &[u8]) -> usize {
+pub fn get_aes_padding(slice: &[u8]) -> usize {
     if slice.is_empty() {
         return 0;
     }
@@ -273,7 +274,7 @@ fn get_aes_padding(slice: &[u8]) -> usize {
     pad as usize
 }
 
-fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+pub fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     if bytes.len() != key.len() {
         panic!("Key and source len differ.")
     }
@@ -287,19 +288,17 @@ fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     out
 }
 
-fn generate_random_bytes(i: usize) -> Vec<u8> {
+pub fn generate_random_bytes(i: usize) -> Vec<u8> {
     (0..i).map(|_| rand::thread_rng().gen()).collect()
 }
 
-#[allow(unused)]
-fn generate_random_bytes_in_range(i: usize, r: Range<u8>) -> Vec<u8> {
+pub fn generate_random_bytes_in_range(i: usize, r: Range<u8>) -> Vec<u8> {
     (0..i)
         .map(|_| rand::thread_rng().gen_range(r.start..r.end))
         .collect()
 }
 
-#[allow(unused)]
-fn generate_random_bytes_in_range_inclusive(i: usize, r: Range<u8>) -> Vec<u8> {
+pub fn generate_random_bytes_in_range_inclusive(i: usize, r: Range<u8>) -> Vec<u8> {
     (0..i)
         .map(|_| rand::thread_rng().gen_range(r.start..=r.end))
         .collect()

@@ -1,17 +1,19 @@
-const RESOURCE_ID: u32 = 100;
-const RESOURCE_NAME: &'static str = "resource.bin";
+use std::ops::Range;
+
+pub const RESOURCE_ID: u32 = 100;
+pub const RESOURCE_NAME: &'static str = "resource.bin";
 
 // Optional parameters
-const TARGET_PROCESS: &'static str = "";
-const SHELLCODE_PATH: &'static str = "";
-const DLL_PATH: &'static str = r"";
+pub const TARGET_PROCESS: &'static str = "";
+pub const SHELLCODE_PATH: &'static str = "";
+pub const DLL_PATH: &'static str = r"";
 
 // Range for random byte generation. Will generate random amount of junk data between resource entries.
-const RANGE_START: usize = 0;
-const RANGE_END: usize = 0x100;
-const RANGE: Range<usize> = RANGE_START..RANGE_END;
+pub const RANGE_START: usize = 0;
+pub const RANGE_END: usize = 0x100;
+pub const PAD_RANGE: Range<usize> = RANGE_START..RANGE_END;
 
-static XOR_STRINGS: [&str; 41] = [
+pub static STRINGS: [&str; 41] = [
     "LoadLibraryA",
     "CryptAcquireContextW",
     "CryptCreateHash",

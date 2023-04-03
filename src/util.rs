@@ -214,35 +214,26 @@ unsafe fn rva_to_foa(nt_headers: &IMAGE_NT_HEADERS, rva: u32) -> u32 {
 
     return 0;
 }
-
+// These are macros in the windows headers. Didn't feel like they would be good rust macros.
 #[inline(always)]
 pub fn lo_word(n: usize) -> u16 {
     (n & 0xFFFF) as u16
 }
-
 #[inline(always)]
 pub fn hi_word(n: usize) -> u16 {
     ((n >> 16) & 0xFFFF) as u16
 }
-
 #[inline(always)]
 pub fn lo_byte(n: usize) -> u8 {
     (n & 0xFF) as u8
 }
-
 #[inline(always)]
 pub fn hi_byte(n: usize) -> u8 {
     ((n >> 8) & 0xFF) as u8
 }
-
-pub fn find_pos(string: &[u8], char: u8) -> usize {
-    for (i, s) in string.iter().enumerate() {
-        if *s == char {
-            return i;
-        }
-    }
-
-    usize::MAX
+//
+pub fn find_char(string: &[u8], char: u8) -> Option<usize> {
+    string.into_iter().position(|c| *c == char)
 }
 
 // Need internal function for this in unmapped PE state.
@@ -291,10 +282,8 @@ pub fn compare_xor_str_and_str_bytes(
     true
 }
 
-// This function assumes that the wide string version of each character in the string is just the u16
-// version of the ASCII character. The DLL names are all stored in Windows memory as wide strings, and this is
-// the best solution I have without allocating on the heap for wide string encoding.
-// You will want to use this with case_insensitive with any string embedded in the resource, as they are all lowercase.
+// &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the two
+// strings as &[u8], and will compare them byte by byte.
 pub fn compare_xor_str_and_w_str_bytes(
     xor_string_bytes: &[u8],
     w_string_bytes: &[u16],
@@ -318,9 +307,10 @@ pub fn compare_xor_str_and_w_str_bytes(
     true
 }
 
-// &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the two
-// strings as &[u8] and &[u16], and will compare them u16 by u16 after casting the u8 to u16.
-// You will want to use this with case_insensitive with any string embedded in the resource, as they are all lowercase.
+// This function assumes that the wide string version of each character in the string is just the u16
+// version of the ASCII character. Here we will take in the two strings as &[u8] and &[u16], and will
+// compare them u16 by u16 after casting the u8 to u16. You will want to use this with case_insensitive
+// with any string embedded in the resource, as they are all lowercase.
 pub fn compare_str_and_w_str_bytes(
     string_bytes: &[u8],
     w_string_bytes: &[u16],

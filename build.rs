@@ -1,10 +1,12 @@
-use std::env;
-use winresource::WindowsResource;
+mod build_src;
 
-include!("build_src/resource_gen.rs");
+use std::env;
+use crate::build_src::resource_gen::ResourceGenerator;
+
 
 fn main() {
     // Don't run this if CARGO_CHECK is set in the environment variables.
+    // Helps VS Code users.
     match env::var("CARGO_CHECK") {
         Ok(_) => { return; }
         Err(_) => {}

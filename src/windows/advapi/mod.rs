@@ -3,11 +3,9 @@
 #![allow(unused)]
 
 use crate::consts::*;
-use crate::crypto_util::get_xor_encrypted_bytes;
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddress, GetProcAddressX};
 
-//advapi32.dll
 pub type FnCryptAcquireContextW = unsafe extern "system" fn(
     phProv: *mut usize,
     szContainer: usize,

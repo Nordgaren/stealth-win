@@ -3,11 +3,9 @@
 #![allow(unused)]
 
 use crate::consts::*;
-use crate::crypto_util::{get_aes_encrypted_resource_bytes, get_xor_encrypted_bytes};
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddress, GetProcAddressX};
 
-//user32.dll
 pub type FnMessageBoxA = unsafe extern "system" fn(
     hWnd: usize,
     lpText: *const u8,

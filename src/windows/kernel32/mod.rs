@@ -7,7 +7,7 @@ use crate::crypto_util::*;
 use crate::svec::ToSVec;
 use crate::util::{
     compare_str_and_w_str_bytes, compare_strs_as_bytes, compare_xor_str_and_str_bytes,
-    compare_xor_str_and_w_str_bytes, find_pos, get_resource_bytes, strlen,
+    compare_xor_str_and_w_str_bytes, find_char, get_resource_bytes, strlen,
 };
 #[cfg(test)]
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
@@ -20,7 +20,6 @@ use std::slice::from_raw_parts;
 use std::str::Utf8Error;
 use std::{mem, slice};
 
-//KERNEL32.DLL
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCreateFileA = unsafe extern "system" fn(
     lpFileName: *const u8,
@@ -601,7 +600,11 @@ unsafe fn get_fwd_addr(pProcAddr: usize) -> usize {
         std::slice::from_raw_parts(pProcAddr as *const u8, strlen(pProcAddr as *const u8))
             .to_svec();
 
-    let szSplitPos = find_pos(&sFwdDll[..], '.' as u8);
+    let szSplitPos = match find_char(&sFwdDll[..], '.' as u8) {
+        None => { return 0; }
+        Some(sz) => {sz}
+    };
+
     sFwdDll[szSplitPos] = 0;
 
     let hFwd = LoadLibraryA(sFwdDll.as_ptr());
