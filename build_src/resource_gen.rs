@@ -100,38 +100,6 @@ impl ResourceGenerator {
         }
     }
 
-    pub(crate) fn build_resource_file(&mut self) {
-        // Put these functions into a vector we can then pop functions out of, to randomize position of resources.
-        let mut functions: Vec<BuildFn> = vec![
-            ResourceGenerator::add_aes_key_to_payload,
-            ResourceGenerator::add_aes_iv_to_payload,
-            ResourceGenerator::add_shellcode_to_payload,
-            ResourceGenerator::add_dll_to_payload,
-            ResourceGenerator::add_target_to_payload,
-        ];
-
-        functions.resize(
-            functions.len() + self.strings.len(),
-            ResourceGenerator::add_string_to_payload,
-        );
-
-        // Randomize the position of strings and order resources are added to the final resource.
-        self.strings.shuffle(&mut rand::thread_rng());
-        functions.shuffle(&mut rand::thread_rng());
-
-        // Make a new Vec<u8> and start adding to it.
-        let mut resource = vec![];
-        for function in functions {
-            function(self, &mut resource)
-        }
-
-        let end_pad = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
-        resource.extend(end_pad);
-
-        fs::write(format!("{}/{}", self.out_dir, RESOURCE_NAME), resource)
-            .expect("Could not write payload file.");
-    }
-
     fn add_target_to_payload(&mut self, payload: &mut Vec<u8>) {
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
         payload.extend(bytes);
@@ -191,7 +159,41 @@ impl ResourceGenerator {
         payload.extend(&self.dll_bytes);
     }
 
-    pub(crate) fn build_consts_file(&self) {
+    pub(crate) fn build_resource_file(&mut self) -> &mut Self {
+        // Put these functions into a vector we can then pop functions out of, to randomize position of resources.
+        let mut functions: Vec<BuildFn> = vec![
+            ResourceGenerator::add_aes_key_to_payload,
+            ResourceGenerator::add_aes_iv_to_payload,
+            ResourceGenerator::add_shellcode_to_payload,
+            ResourceGenerator::add_dll_to_payload,
+            ResourceGenerator::add_target_to_payload,
+        ];
+
+        functions.resize(
+            functions.len() + self.strings.len(),
+            ResourceGenerator::add_string_to_payload,
+        );
+
+        // Randomize the position of strings and order resources are added to the final resource.
+        self.strings.shuffle(&mut rand::thread_rng());
+        functions.shuffle(&mut rand::thread_rng());
+
+        // Make a new Vec<u8> and start adding to it.
+        let mut resource = vec![];
+        for function in functions {
+            function(self, &mut resource)
+        }
+
+        let end_pad = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
+        resource.extend(end_pad);
+
+        fs::write(format!("{}/{}", self.out_dir, RESOURCE_NAME), resource)
+            .expect("Could not write payload file.");
+
+        self
+    }
+
+    pub(crate) fn build_consts_file(&self) -> &Self {
         let mut consts = vec!["#![allow(unused)]".to_string()];
 
         consts.push(format!(
@@ -271,9 +273,11 @@ impl ResourceGenerator {
         });
 
         fs::write("src/consts.rs", consts.join("\n")).expect("Could not write consts file.");
+
+        self
     }
 
-    pub(crate) fn build_pe_embed_files(&self) {
+    pub(crate) fn build_pe_embed_files(&self) -> &Self {
         fs::write(
             format!("{}/resources.h", self.out_dir),
             format!("#define PAYLOAD_ID {}\n", RESOURCE_ID),
@@ -288,14 +292,18 @@ impl ResourceGenerator {
             ),
         )
         .expect("Could not write resources.rc file.");
+
+        self
     }
 
-    pub(crate) fn set_pe_resource_file(&self) {
+    pub(crate) fn set_pe_resource_file(&self) -> &Self {
         if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
             WindowsResource::new()
                 .set_resource_file(&format!("{}/resources.rc", self.out_dir))
                 .compile()
                 .expect("Could not compile pe resource.");
         }
+
+        self
     }
 }
