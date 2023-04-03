@@ -277,7 +277,7 @@ impl ResourceGenerator {
         self
     }
 
-    pub(crate) fn build_pe_embed_files(&self) -> &Self {
+    pub(crate) fn build_resource_headers(&self) -> &Self {
         fs::write(
             format!("{}/resources.h", self.out_dir),
             format!("#define PAYLOAD_ID {}\n", RESOURCE_ID),
@@ -296,14 +296,12 @@ impl ResourceGenerator {
         self
     }
 
-    pub(crate) fn set_pe_resource_file(&self) -> &Self {
+    pub(crate) fn build(&self) {
         if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
             WindowsResource::new()
                 .set_resource_file(&format!("{}/resources.rc", self.out_dir))
                 .compile()
                 .expect("Could not compile pe resource.");
         }
-
-        self
     }
 }

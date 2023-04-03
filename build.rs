@@ -20,7 +20,7 @@ fn main() {
         // Builds src/consts.rs for use in the actual application
         .build_consts_file()
         // Build the resource header files for embedding.
-        .build_pe_embed_files()
+        .build_resource_headers()
         // Set the newly generated resource and compile for being linked to the final exe.
-        .set_pe_resource_file();
+        .build();
 }
