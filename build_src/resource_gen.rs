@@ -1,6 +1,4 @@
-use crate::build_src::build_config::{
-    DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, STRINGS, TARGET_PROCESS,
-};
+use crate::build_src::build_config::{DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, TARGET_PROCESS, USER_STRINGS};
 use crate::build_src::build_util::{
     aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, xor_encrypt_bytes,
 };
@@ -9,6 +7,7 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use std::{env, fs};
 use winresource::WindowsResource;
+use crate::build_src::required::STRINGS;
 
 type BuildFn = fn(&mut ResourceGenerator, &mut Vec<u8>);
 
@@ -71,7 +70,7 @@ impl ResourceGenerator {
         };
 
         let strings = STRINGS
-            .into_iter()
+            .iter()
             .map(|string| {
                 let key = generate_random_bytes(string.len());
                 Strings {
@@ -82,7 +81,16 @@ impl ResourceGenerator {
                     key_offset: usize::MAX,
                 }
             })
-            .collect();
+            .chain(USER_STRINGS.iter().map(|string| {
+                let key = generate_random_bytes(string.len());
+                Strings {
+                    string_name: string,
+                    encrypted_bytes: xor_encrypt_bytes(string.to_lowercase().as_bytes(), &key[..]),
+                    offset: usize::MAX,
+                    key_bytes: key,
+                    key_offset: usize::MAX,
+                }
+            })).collect();
 
         ResourceGenerator {
             out_dir,

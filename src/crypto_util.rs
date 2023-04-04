@@ -161,3 +161,18 @@ fn get_aes_padding(slice: &[u8]) -> usize {
 
     pad as usize
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_xor_encrypted_string_test() {
+        unsafe {
+            let kernel32 =
+                get_xor_encrypted_bytes(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN);
+            assert_eq!(kernel32.as_slice(), "kernel32.dll".as_bytes())
+        }
+    }
+
+}

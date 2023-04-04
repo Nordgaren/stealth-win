@@ -12,6 +12,7 @@ fn main() {
         }
         Err(_) => {}
     }
+
     // Get the out dir and pass it into the generator.
     let out_dir = env::var("OUT_DIR").unwrap();
     ResourceGenerator::new(out_dir)

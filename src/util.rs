@@ -3,7 +3,7 @@
 #![allow(unused)]
 
 use crate::consts::*;
-use crate::windows::kernel32::MAX_PATH;
+use crate::windows::kernel32::{MAX_PATH, PAGE_SIZE};
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
     IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY,
@@ -144,11 +144,9 @@ unsafe fn get_entry_offset_by_name(
     0
 }
 
-const PAGE_BOUNDRY: usize = 0x1000;
-
 pub unsafe fn get_dll_base() -> usize {
     // file will be mapped to the start of a page boundary.
-    let mut module_address = get_return_address() & !(PAGE_BOUNDRY - 1);
+    let mut module_address = get_return_address() & !(PAGE_SIZE - 1);
 
     loop {
         let magic = module_address as *const u16;
@@ -167,7 +165,7 @@ pub unsafe fn get_dll_base() -> usize {
         }
 
         // Just search on the page boundaries.
-        module_address -= PAGE_BOUNDRY;
+        module_address -= PAGE_SIZE;
     }
 }
 
@@ -382,5 +380,36 @@ pub unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
 
     for i in 0..total_size {
         dst_slice[i] = src_slice[i];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::windows::kernel32::GetModuleHandleA;
+    use super::*;
+
+    #[test]
+    fn get_return_addr() {
+        unsafe {
+            let get_return = get_return_address();
+            assert_ne!(get_return, 0)
+        }
+    }
+
+    #[test]
+    fn get_resource() {
+        unsafe {
+            let resource = get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN);
+            assert_ne!(resource.len(), 0)
+        }
+    }
+
+    #[test]
+    fn get_dll_base_test() {
+        unsafe {
+            let dll_base = get_dll_base();
+            let handle = GetModuleHandleA(0 as *const u8);
+            assert_eq!(dll_base, handle)
+        }
     }
 }

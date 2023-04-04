@@ -257,15 +257,6 @@ mod tests {
     use crate::svec::{DropTest, SVec, ToSVec};
 
     #[test]
-    fn test_svec() {
-        unsafe {
-            let mut svec = SVec::new();
-            svec.push(0);
-            assert_eq!(svec.len(), 1);
-        }
-    }
-
-    #[test]
     fn test_svec_capacity() {
         unsafe {
             let mut svec = SVec::new();
@@ -304,8 +295,7 @@ mod tests {
         svec.push(3);
         svec.push(4);
         svec.push(5);
-        let indexed_slice = &svec[1..];
-        assert_eq!(indexed_slice, [2, 3, 4, 5]);
+        assert_eq!(&svec[1..], [2, 3, 4, 5]);
     }
 
     static mut COUNT: i32 = 0;
@@ -394,8 +384,24 @@ mod tests {
 
     #[test]
     fn resize_shrink() {
-        let mut svec = SVec::with_capacity(15);
+        let mut svec = SVec::new();
+        svec.push(0);
+        svec.push(1);
+        svec.push(2);
+        svec.push(3);
+        svec.push(4);
+        svec.push(5);
+        svec.push(6);
+        svec.push(7);
+        svec.push(8);
+        svec.push(9);
+        svec.push(10);
+        svec.push(11);
+        svec.push(12);
+        svec.push(13);
+        svec.push(14);
+        svec.push(15);
         svec.resize(10, 0);
-        assert_eq!(&svec[..], [0; 10])
+        assert_eq!(&svec[..], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     }
 }
