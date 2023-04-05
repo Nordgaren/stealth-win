@@ -1,5 +1,5 @@
-use std::ops::Range;
 use lazy_static::lazy_static;
+use std::ops::RangeInclusive;
 
 pub const RESOURCE_ID: u32 = 100;
 pub const RESOURCE_NAME: &'static str = "resource.bin";
@@ -12,11 +12,14 @@ pub const DLL_PATH: &'static str = r"";
 // Range for random byte generation. Will generate random amount of junk data between resource entries.
 pub const RANGE_START: usize = 0;
 pub const RANGE_END: usize = 0x100;
-pub const PAD_RANGE: Range<usize> = RANGE_START..RANGE_END;
+pub const PAD_RANGE: RangeInclusive<usize> = RANGE_START..=RANGE_END;
 
+// Any strings placed in here will be embedded in the PE resource, with a constant named after the string
+// I.E. TEST_STRING
 lazy_static! {
-pub static ref USER_STRINGS: Vec<&'static str> = vec![
-];
+    pub static ref USER_STRINGS: Vec<&'static str> = vec![
+
+    ];
 }
 
 // Will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build'

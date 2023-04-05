@@ -53,19 +53,19 @@ pub type FnGetLastError = unsafe extern "system" fn() -> u32;
 pub type FnGetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
 pub type FnGetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
 pub type FnGetProcAddress =
-unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FnFindResourceA =
-unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type FnFreeConsole = unsafe extern "system" fn() -> u32;
 pub type FnLoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
 pub type FnLockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
 pub type FnSizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
 pub type FnCreateToolhelp32Snapshot =
-unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type FnProcess32First =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnProcess32Next =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type FnOpenFile = unsafe extern "system" fn(
     lpFileName: *const u8,
@@ -73,7 +73,7 @@ pub type FnOpenFile = unsafe extern "system" fn(
     uStyle: u32,
 ) -> i32;
 pub type FnOpenProcess =
-unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type FnIsProcessorFeaturePresent = unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
 pub type FnResumeThread = unsafe extern "system" fn(hThread: usize) -> u32;
 pub type FnSetStdHandle = unsafe extern "system" fn(nStdHandle: u32, hHandle: usize) -> u32;
@@ -97,7 +97,7 @@ pub type FnVirtualProtect = unsafe extern "system" fn(
     lpflOldProtect: *mut u32,
 ) -> u32;
 pub type FnVirtualFree =
-unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
+    unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
 pub type FnVirtualFreeEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -128,7 +128,7 @@ pub type FnCreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type FnWaitForSingleObject =
-unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 pub type FnGetCurrentProcess = unsafe extern "system" fn() -> usize;
 
 pub const PROCESS_TERMINATE: u32 = 0x0001;
@@ -1120,26 +1120,37 @@ mod tests {
         }
     }
 
-    fn get_function_ordinal(dll_name:&[u8], function_name: &[u8]) -> u16 {
+    fn get_function_ordinal(dll_name: &[u8], function_name: &[u8]) -> u16 {
         unsafe {
             let base_addr = GetModuleHandleA(dll_name.as_ptr());
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
-            let nt_headers: &IMAGE_NT_HEADERS = mem::transmute(base_addr + dos_header.e_lfanew as usize);
-            let export_dir = &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+            let nt_headers: &IMAGE_NT_HEADERS =
+                mem::transmute(base_addr + dos_header.e_lfanew as usize);
+            let export_dir =
+                &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
 
-            let image_export_directory: &IMAGE_EXPORT_DIRECTORY = mem::transmute(base_addr + export_dir.VirtualAddress as usize);
+            let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
+                mem::transmute(base_addr + export_dir.VirtualAddress as usize);
 
-            let name_dir = std::slice::from_raw_parts((base_addr + image_export_directory.AddressOfNames as usize) as *const u32, image_export_directory.NumberOfNames as usize);
-            let ordinal_dir = std::slice::from_raw_parts((base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16, image_export_directory.NumberOfNames as usize);
+            let name_dir = std::slice::from_raw_parts(
+                (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
+                image_export_directory.NumberOfNames as usize,
+            );
+            let ordinal_dir = std::slice::from_raw_parts(
+                (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
+                image_export_directory.NumberOfNames as usize,
+            );
 
             for i in 0..name_dir.len() {
-                let name = std::slice::from_raw_parts((base_addr + name_dir[i] as usize) as *const u8, strlen((base_addr + name_dir[i] as usize) as *const u8));
+                let name = std::slice::from_raw_parts(
+                    (base_addr + name_dir[i] as usize) as *const u8,
+                    strlen((base_addr + name_dir[i] as usize) as *const u8),
+                );
 
                 if name == function_name {
                     return ordinal_dir[i] + image_export_directory.Base as u16;
                 }
             }
-
         }
 
         0u16
@@ -1148,7 +1159,8 @@ mod tests {
     #[test]
     fn get_proc_address_by_ordinal() {
         unsafe {
-            let ordinal = get_function_ordinal("KERNEL32.DLL\0".as_bytes(), "LoadLibraryA".as_bytes()) as u32;
+            let ordinal =
+                get_function_ordinal("KERNEL32.DLL\0".as_bytes(), "LoadLibraryA".as_bytes()) as u32;
             let load_library_a_address_ordinal = GetProcAddressInternal(
                 GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
                 ordinal.to_le_bytes().as_slice(),

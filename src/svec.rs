@@ -8,7 +8,7 @@ use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use std::mem::size_of;
 use std::ops::{Index, IndexMut, RangeFrom};
 use std::ptr::NonNull;
-use std::slice::SliceIndex;
+use std::slice::{Iter, SliceIndex};
 use std::{cmp, fmt, mem, ptr};
 
 pub struct SVec<T> {
@@ -69,7 +69,7 @@ impl<T> SVec<T> {
     }
     fn grow(&mut self, additional: usize) {
         if size_of::<T>() == 0 {
-            panic!("Cannot grow zero sized types")
+            panic!()
         }
 
         // For some reason, self.len.checked_add(additional) causes a crash if you are working in an unmapped PE.
@@ -78,21 +78,19 @@ impl<T> SVec<T> {
 
         let new_cap = cmp::max(self.cap * 2, required_cap);
         let new_cap = cmp::max(Self::MIN_NON_ZERO_CAP, new_cap);
-        let new_layout = Layout::array::<T>(new_cap).expect("Could not get layout.");
-        let tmp = self.as_ptr();
+        let new_layout = Layout::array::<T>(new_cap).unwrap();
 
         unsafe {
+            let tmp = self.as_ptr();
             let ptr = VirtualAlloc(
                 0,
                 new_layout.size(),
                 MEM_RESERVE | MEM_COMMIT,
                 PAGE_EXECUTE_READWRITE,
             );
-            self.ptr = NonNull::new(ptr as *mut T).expect("Could not allocate memory!");
+            self.ptr = NonNull::new(ptr as *mut T).unwrap();
             copy_buffer(tmp, self.as_mut_ptr(), self.len());
-            if !tmp.is_null() {
-                VirtualFree(tmp as usize, 0, MEM_RELEASE);
-            }
+            VirtualFree(tmp as usize, 0, MEM_RELEASE);
         }
         self.cap = new_cap;
     }
@@ -112,11 +110,11 @@ impl<T> SVec<T> {
     where
         T: Clone,
     {
-        self.grow(self.len() + n);
+        self.grow(self.len + n);
         let old_size = self.len;
-        self.len = self.len() + n;
+        self.len += n;
 
-        for i in old_size..self.len() {
+        for i in old_size..self.len {
             self[i] = value.clone();
         }
     }
@@ -133,12 +131,7 @@ impl<T> SVec<T> {
     }
     #[inline]
     pub unsafe fn set_len(&mut self, new_len: usize) {
-        assert!(
-            new_len <= self.capacity(),
-            "Cannot set length({:X}) above capacity ({:X})",
-            new_len,
-            self.capacity()
-        );
+        assert!(new_len <= self.capacity());
 
         self.len = new_len;
     }
@@ -165,6 +158,33 @@ impl<T> SVec<T> {
     #[inline]
     pub fn capacity(&self) -> usize {
         self.cap
+    }
+    #[inline]
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.as_slice().iter()
+    }
+}
+
+impl<T> FromIterator<T> for SVec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut iterator = iter.into_iter();
+        let mut svec = SVec::new();
+
+        while let Some(item) = iterator.next() {
+            svec.push(item);
+        }
+
+        svec
+    }
+}
+
+impl<'a, T> IntoIterator for &'a SVec<T> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T>;
+
+    #[inline]
+    fn into_iter(self) -> Iter<'a, T> {
+        self.iter()
     }
 }
 
@@ -239,22 +259,15 @@ impl<T> Drop for SVec<T> {
     fn drop(&mut self) {
         unsafe {
             ptr::drop_in_place(ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), self.len));
-            VirtualFree(self.ptr.as_ptr() as usize, 0, MEM_RELEASE);
+            VirtualFree(self.as_ptr() as usize, 0, MEM_RELEASE);
         }
-    }
-}
-
-struct DropTest(&'static mut i32);
-
-impl Drop for DropTest {
-    fn drop(&mut self) {
-        *self.0 -= 1;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::svec::{DropTest, SVec, ToSVec};
+    use super::*;
+    const DUMMY_SLICE: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
     #[test]
     fn test_svec_capacity() {
@@ -289,43 +302,33 @@ mod tests {
 
     #[test]
     fn slices() {
-        let mut svec = SVec::new();
-        svec.push(1);
-        svec.push(2);
-        svec.push(3);
-        svec.push(4);
-        svec.push(5);
-        assert_eq!(&svec[1..], [2, 3, 4, 5]);
+        let mut svec: SVec<u8> = (0..=15).collect();
+
+        assert_eq!(&svec[1..], &DUMMY_SLICE[1..]);
     }
 
     static mut COUNT: i32 = 0;
 
+    struct DropTest(i32);
+    impl Drop for DropTest {
+        fn drop(&mut self) {
+            unsafe {
+                COUNT -= self.0;
+            }
+        }
+    }
+
     fn drop_test_function_call() {
         let mut svec = SVec::new();
         unsafe {
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
+            svec.push(DropTest(1));
         }
     }
 
     #[test]
     fn drop_test() {
         unsafe {
-            COUNT = 16;
+            COUNT = 1;
             drop_test_function_call();
             assert_eq!(COUNT, 0);
         }
@@ -335,73 +338,52 @@ mod tests {
     fn truncate_test() {
         let mut svec = SVec::new();
         unsafe {
-            COUNT = 6;
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.push(DropTest(&mut COUNT));
-            svec.truncate(3);
-            assert_eq!(svec.len(), 3);
-            assert_eq!(COUNT, 3);
+            COUNT = 2;
+            svec.push(DropTest(1));
+            svec.push(DropTest(1));
+            svec.truncate(1);
+            assert_eq!(svec.len(), 1);
+            assert_eq!(COUNT, 1);
         }
     }
 
     #[test]
     fn formatting_test() {
-        let mut svec = SVec::new();
-        svec.push(0);
-        svec.push(1);
-        svec.push(2);
-        svec.push(3);
-        svec.push(4);
-        svec.push(5);
-        svec.push(6);
-        svec.push(7);
-        svec.push(8);
-        svec.push(9);
-        svec.push(10);
-        svec.push(11);
-        svec.push(12);
-        svec.push(13);
-        svec.push(14);
-        svec.push(15);
+        let mut svec: SVec<u32> = (0..=15).collect();
 
-        let dummy_slice = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        assert_eq!(format!("{:X}", svec), format!("{:X?}", dummy_slice));
-        assert_eq!(format!("{:x}", svec), format!("{:x?}", dummy_slice));
-        assert_eq!(format!("{}", svec), format!("{:?}", dummy_slice));
+        assert_eq!(format!("{:X}", svec), format!("{:X?}", DUMMY_SLICE));
+        assert_eq!(format!("{:x}", svec), format!("{:x?}", DUMMY_SLICE));
+        assert_eq!(format!("{}", svec), format!("{:?}", DUMMY_SLICE));
     }
 
     #[test]
+    fn collect_test() {
+        let svec: SVec<u8> = (0..=15).collect();
+
+        assert_eq!(svec.as_slice(), &DUMMY_SLICE);
+    }
+
+    #[test]
+    fn iter_test() {
+        let svec: SVec<u8> = (0..=15).collect();
+
+        for (i, b) in svec.iter().enumerate() {
+            assert_eq!(*b, DUMMY_SLICE[i])
+        }
+    }
+
+    const GROW_LEN: usize = 10;
+    #[test]
     fn resize_grow() {
         let mut svec = SVec::new();
-        svec.push(0);
-        svec.resize(10, 9);
-        assert_eq!(&svec[1..], [9; 9])
+        svec.resize(GROW_LEN, 0);
+        assert_eq!(&svec[..], [0; GROW_LEN])
     }
 
     #[test]
     fn resize_shrink() {
-        let mut svec = SVec::new();
-        svec.push(0);
-        svec.push(1);
-        svec.push(2);
-        svec.push(3);
-        svec.push(4);
-        svec.push(5);
-        svec.push(6);
-        svec.push(7);
-        svec.push(8);
-        svec.push(9);
-        svec.push(10);
-        svec.push(11);
-        svec.push(12);
-        svec.push(13);
-        svec.push(14);
-        svec.push(15);
+        let mut svec: SVec<u8> = (0..=15).collect();
         svec.resize(10, 0);
-        assert_eq!(&svec[..], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        assert_eq!(&svec[..], &DUMMY_SLICE[..=9])
     }
 }

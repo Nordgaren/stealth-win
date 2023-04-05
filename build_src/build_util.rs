@@ -14,7 +14,7 @@ use windows_sys::Win32::Security::Cryptography::{
     KP_KEYLEN, PROV_RSA_AES,
 };
 
-pub fn get_key_len() -> usize {
+pub(crate) fn get_key_len() -> usize {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -72,7 +72,7 @@ pub fn get_key_len() -> usize {
     }
 }
 
-pub fn get_iv_len() -> usize {
+pub(crate) fn get_iv_len() -> usize {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -116,14 +116,14 @@ pub fn get_iv_len() -> usize {
         let mut iv: Vec<u8> = vec![0; 420];
         let mut len = iv.len() as u32;
         if CryptGetKeyParam(hKey, KP_IV, iv.as_mut_ptr(), addr_of_mut!(len), 0) == 0 {
-            panic!("GLE: {:X}", GetLastError());
+            panic!();
         }
 
         len as usize
     }
 }
 
-pub fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
+pub(crate) fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -200,7 +200,7 @@ pub fn aes_encrypt_bytes(bytes: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     }
 }
 
-pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
+pub(crate) fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     unsafe {
         let mut hProv = 0;
         if CryptAcquireContextW(
@@ -265,7 +265,7 @@ pub fn aes_decrypt_bytes(bytes: Vec<u8>, key: &[u8], iv: &[u8]) -> Vec<u8> {
     }
 }
 
-pub fn get_aes_padding(slice: &[u8]) -> usize {
+pub(crate) fn get_aes_padding(slice: &[u8]) -> usize {
     if slice.is_empty() {
         return 0;
     }
@@ -280,7 +280,7 @@ pub fn get_aes_padding(slice: &[u8]) -> usize {
     pad as usize
 }
 
-pub fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+pub(crate) fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     if bytes.len() != key.len() {
         panic!("Key and source len differ.")
     }
@@ -294,18 +294,33 @@ pub fn xor_encrypt_bytes(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     out
 }
 
-pub fn generate_random_bytes(i: usize) -> Vec<u8> {
-    (0..i).map(|_| rand::thread_rng().gen()).collect()
+pub(crate) fn generate_random_bytes(num_bytes: usize) -> Vec<u8> {
+    (0..num_bytes).map(|_| rand::thread_rng().gen()).collect()
 }
 
-pub fn generate_random_bytes_in_range(i: usize, r: Range<u8>) -> Vec<u8> {
-    (0..i)
-        .map(|_| rand::thread_rng().gen_range(r.start..r.end))
+pub(crate) fn generate_random_bytes_in_range(num_bytes: usize, value_range: Range<u8>) -> Vec<u8> {
+    (0..num_bytes)
+        .map(|_| rand::thread_rng().gen_range(value_range.start..value_range.end))
         .collect()
 }
 
-pub fn generate_random_bytes_in_range_inclusive(i: usize, r: Range<u8>) -> Vec<u8> {
-    (0..i)
-        .map(|_| rand::thread_rng().gen_range(r.start..=r.end))
+pub(crate) fn generate_random_bytes_in_range_inclusive(
+    num_bytes: usize,
+    value_range: Range<u8>,
+) -> Vec<u8> {
+    (0..num_bytes)
+        .map(|_| rand::thread_rng().gen_range(value_range.start..=value_range.end))
         .collect()
+}
+
+pub(crate) fn make_const_name(string: &str) -> String {
+    let replace = [" ", ",", "."];
+
+    let mut const_name = string.to_uppercase();
+
+    for pattern in replace {
+        const_name = const_name.replace(pattern, "_")
+    }
+
+    const_name
 }

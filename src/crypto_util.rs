@@ -174,5 +174,4 @@ mod tests {
             assert_eq!(kernel32.as_slice(), "kernel32.dll".as_bytes())
         }
     }
-
 }

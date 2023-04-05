@@ -39,13 +39,13 @@ pub struct IMAGE_DOS_HEADER {
 
 #[repr(C)]
 pub struct IMAGE_FILE_HEADER {
-    pub Machine: IMAGE_FILE_MACHINE,
+    pub Machine: u16,
     pub NumberOfSections: u16,
     pub TimeDateStamp: u32,
     pub PointerToSymbolTable: u32,
     pub NumberOfSymbols: u32,
     pub SizeOfOptionalHeader: u16,
-    pub Characteristics: IMAGE_FILE_CHARACTERISTICS,
+    pub Characteristics: u16,
 }
 
 #[repr(C)]
@@ -57,7 +57,7 @@ pub struct IMAGE_NT_HEADERS {
 
 #[repr(C)]
 pub struct IMAGE_OPTIONAL_HEADER {
-    pub Magic: IMAGE_OPTIONAL_HEADER_MAGIC,
+    pub Magic: u16,
     pub MajorLinkerVersion: u8,
     pub MinorLinkerVersion: u8,
     pub SizeOfCode: u32,
@@ -80,8 +80,8 @@ pub struct IMAGE_OPTIONAL_HEADER {
     pub SizeOfImage: u32,
     pub SizeOfHeaders: u32,
     pub CheckSum: u32,
-    pub Subsystem: IMAGE_SUBSYSTEM,
-    pub DllCharacteristics: IMAGE_DLL_CHARACTERISTICS,
+    pub Subsystem: u16,
+    pub DllCharacteristics: u16,
     pub SizeOfStackReserve: usize,
     pub SizeOfStackCommit: usize,
     pub SizeOfHeapReserve: usize,
@@ -94,7 +94,7 @@ pub struct IMAGE_OPTIONAL_HEADER {
 #[repr(C)]
 pub struct IMAGE_SECTION_HEADER {
     pub Name: [u8; 8],
-    pub Misc: IMAGE_SECTION_HEADER_0,
+    pub Misc: IMAGE_SECTION_HEADER_UNION,
     pub VirtualAddress: u32,
     pub SizeOfRawData: u32,
     pub PointerToRawData: u32,
@@ -102,18 +102,18 @@ pub struct IMAGE_SECTION_HEADER {
     pub PointerToLinenumbers: u32,
     pub NumberOfRelocations: u16,
     pub NumberOfLinenumbers: u16,
-    pub Characteristics: IMAGE_SECTION_CHARACTERISTICS,
+    pub Characteristics: u32,
 }
 
 #[repr(C)]
-pub union IMAGE_SECTION_HEADER_0 {
+pub union IMAGE_SECTION_HEADER_UNION {
     pub PhysicalAddress: u32,
     pub VirtualSize: u32,
 }
 
 #[repr(C)]
 pub struct IMAGE_IMPORT_DESCRIPTOR {
-    pub OriginalFirstThunk: u32,
+    pub Misc: IMAGE_IMPORT_DESCRIPTOR_UNION,
     // 0 if not bound,
     // -1 if bound, and real date\time stamp
     //     in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND)
@@ -124,6 +124,12 @@ pub struct IMAGE_IMPORT_DESCRIPTOR {
     pub Name: u32,
     // RVA to IAT (if bound this IAT has actual addresses)
     pub FirstThunk: u32,
+}
+
+#[repr(C)]
+pub union IMAGE_IMPORT_DESCRIPTOR_UNION {
+    pub Characteristics: u32,
+    pub OriginalFirstThunk: u32,
 }
 
 #[repr(C)]
@@ -166,14 +172,6 @@ pub struct IMAGE_IMPORT_BY_NAME {
     pub Hint: u16,
     pub Name: u8,
 }
-
-pub type IMAGE_SUBSYSTEM = u16;
-pub type IMAGE_DLL_CHARACTERISTICS = u16;
-pub type IMAGE_FILE_CHARACTERISTICS = u16;
-pub type IMAGE_OPTIONAL_HEADER_MAGIC = u16;
-pub type IMAGE_FILE_MACHINE = u16;
-pub type IMAGE_SECTION_CHARACTERISTICS = u32;
-pub type IMAGE_DIRECTORY_ENTRY = u32;
 
 #[repr(C)]
 pub struct PEB {

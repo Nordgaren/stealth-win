@@ -2,16 +2,19 @@ mod build_src;
 
 use crate::build_src::resource_gen::ResourceGenerator;
 use std::env;
+use config::Config;
 
 fn main() {
     // Don't run this if CARGO_CHECK is set in the environment variables.
-    // Helps VS Code users.
+    // Helps anyone who runs Cargo Check on the fly with their editor that can also
+    // set environment variables.
     match env::var("CARGO_CHECK") {
         Ok(_) => {
             return;
         }
-        Err(_) => {}
+        _ => {}
     }
+
 
     // Get the out dir and pass it into the generator.
     let out_dir = env::var("OUT_DIR").unwrap();

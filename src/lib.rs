@@ -4,7 +4,7 @@
 
 pub mod consts;
 pub mod crypto_util;
+pub mod pe;
 pub mod svec;
 pub mod util;
 pub mod windows;
-

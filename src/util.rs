@@ -29,7 +29,7 @@ pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'stat
     &resource[offset..end]
 }
 
-unsafe fn check_mapped(base_address: usize) -> bool {
+pub(crate) unsafe fn check_mapped(base_address: usize) -> bool {
     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
     let first_section: &IMAGE_SECTION_HEADER =
         mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
@@ -385,14 +385,21 @@ pub unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
 
 #[cfg(test)]
 mod tests {
-    use crate::windows::kernel32::GetModuleHandleA;
     use super::*;
+    use crate::windows::kernel32::GetModuleHandleA;
+    use std::sync::Mutex;
 
     #[test]
     fn get_return_addr() {
         unsafe {
-            let get_return = get_return_address();
-            assert_ne!(get_return, 0)
+            let return_addr = get_return_address();
+            let base_addr = GetModuleHandleA(0 as *const u8);
+            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
+            let nt_header: &IMAGE_NT_HEADERS =
+                mem::transmute(base_addr + dos_header.e_lfanew as usize);
+            let end_addr = base_addr + nt_header.OptionalHeader.SizeOfImage as usize;
+
+            assert!((base_addr..end_addr).contains(&return_addr));
         }
     }
 
@@ -400,7 +407,7 @@ mod tests {
     fn get_resource() {
         unsafe {
             let resource = get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN);
-            assert_ne!(resource.len(), 0)
+            assert_eq!(resource.len(), "kernel32.dll".len())
         }
     }
 
