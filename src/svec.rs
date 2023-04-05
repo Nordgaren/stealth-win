@@ -307,13 +307,13 @@ mod tests {
         assert_eq!(&svec[1..], &DUMMY_SLICE[1..]);
     }
 
-    static mut DROP_COUNT: i32 = 0;
+    static mut drop_count: i32 = 0;
 
     struct DropTest(i32);
     impl Drop for DropTest {
         fn drop(&mut self) {
             unsafe {
-                DROP_COUNT -= self.0;
+                drop_count -= self.0;
             }
         }
     }
@@ -328,9 +328,9 @@ mod tests {
     #[test]
     fn drop_test() {
         unsafe {
-            DROP_COUNT = 1;
+            drop_count = 1;
             drop_test_function_call();
-            assert_eq!(DROP_COUNT, 0);
+            assert_eq!(drop_count, 0);
         }
     }
 
@@ -338,12 +338,12 @@ mod tests {
     fn truncate_test() {
         let mut svec = SVec::new();
         unsafe {
-            DROP_COUNT = 2;
+            drop_count = 2;
             svec.push(DropTest(1));
             svec.push(DropTest(1));
             svec.truncate(1);
             assert_eq!(svec.len(), 1);
-            assert_eq!(DROP_COUNT, 1);
+            assert_eq!(drop_count, 1);
         }
     }
 
