@@ -16,36 +16,47 @@ use std::{mem, slice};
 
 mod definitions;
 
-pub struct PE<T> {
+pub struct PE<'a, T> {
     base_address: usize,
-    dos_header: &'static IMAGE_DOS_HEADER,
+    dos_header: &'a IMAGE_DOS_HEADER,
     nt_headers: usize,
     image_optional_header: usize,
     is_64bit: bool,
     is_mapped: bool,
     phantom_data: PhantomData<T>,
 }
+
 pub struct Base;
+
 pub struct NtHeaders;
+
 pub struct ImageOptionalHeader;
 
-impl<T> PE<T> {
+impl<'a, T> PE<'a, T> {
     #[inline(always)]
     pub fn base_address(&self) -> usize {
         self.base_address
     }
 }
 
-impl PE<Base> {
+impl<'a> PE<'a, Base> {
     #[inline(always)]
-    pub fn from_ptr(ptr: *const u8) -> Result<Self, ()> {
-        Self::from_addr(ptr as usize)
+    pub fn from_slice(ptr: &'a [u8]) -> Result<Self, ()> {
+        unsafe { Self::from_address(ptr.as_ptr() as usize) }
     }
     #[inline(always)]
-    pub fn from_ptr_unchecked(ptr: *const u8) -> Self {
-        Self::from_addr_unchecked(ptr as usize)
+    pub fn from_slice_unchecked(ptr: &'a [u8]) -> Self {
+        unsafe { Self::from_address_unchecked(ptr.as_ptr() as usize) }
     }
-    pub fn from_addr(base_address: usize) -> Result<Self, ()> {
+    #[inline(always)]
+    pub unsafe fn from_ptr(ptr: *const u8) -> Result<Self, ()> {
+        Self::from_address(ptr as usize)
+    }
+    #[inline(always)]
+    pub unsafe fn from_ptr_unchecked(ptr: *const u8) -> Self {
+        Self::from_address_unchecked(ptr as usize)
+    }
+    pub unsafe fn from_address(base_address: usize) -> Result<Self, ()> {
         unsafe {
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address as usize);
             let nt_headers: &IMAGE_NT_HEADERS =
@@ -72,7 +83,7 @@ impl PE<Base> {
             Ok(pe)
         }
     }
-    pub fn from_addr_unchecked(base_address: usize) -> Self {
+    pub unsafe fn from_address_unchecked(base_address: usize) -> Self {
         unsafe {
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address as usize);
             let nt_headers: &IMAGE_NT_HEADERS =
@@ -131,7 +142,7 @@ impl PE<Base> {
 
         None
     }
-    pub fn get_pe_resource(&self, resource_id: u32) -> Option<&'static [u8]> {
+    pub fn get_pe_resource(&self, resource_id: u32) -> Option<&'a [u8]> {
         let optional_header = self.nt_headers().optional_header().data_directory();
         let resource_data_dir = &optional_header[IMAGE_DIRECTORY_ENTRY_RESOURCE as usize];
 
@@ -140,9 +151,8 @@ impl PE<Base> {
             resource_directory_table_offset = self.rva_to_foa(resource_directory_table_offset)?
         }
         unsafe {
-            let resource_directory_table: &RESOURCE_DIRECTORY_TABLE = mem::transmute(
-                self.base_address + resource_directory_table_offset as usize,
-            );
+            let resource_directory_table: &RESOURCE_DIRECTORY_TABLE =
+                mem::transmute(self.base_address + resource_directory_table_offset as usize);
 
             let resource_data_entry =
                 get_resource_data_entry(resource_directory_table, resource_id)?;
@@ -164,11 +174,11 @@ impl PE<Base> {
         self.base_address
     }
     #[inline(always)]
-    pub fn dos_header(&self) -> &'static IMAGE_DOS_HEADER {
+    pub fn dos_header(&self) -> &'a IMAGE_DOS_HEADER {
         self.dos_header
     }
     #[inline(always)]
-    pub fn nt_headers(&self) -> PE<NtHeaders> {
+    pub fn nt_headers(&self) -> PE<'a, NtHeaders> {
         PE {
             base_address: self.base_address,
             dos_header: self.dos_header,
@@ -189,17 +199,17 @@ impl PE<Base> {
     }
 }
 
-impl PE<NtHeaders> {
+impl<'a> PE<'a, NtHeaders> {
     #[inline(always)]
     pub fn address(&self) -> usize {
         self.nt_headers
     }
     #[inline(always)]
-    fn nt_headers32(&self) -> &'static IMAGE_NT_HEADERS32 {
+    fn nt_headers32(&self) -> &'a IMAGE_NT_HEADERS32 {
         unsafe { mem::transmute(self.nt_headers) }
     }
     #[inline(always)]
-    fn nt_headers64(&self) -> &'static IMAGE_NT_HEADERS64 {
+    fn nt_headers64(&self) -> &'a IMAGE_NT_HEADERS64 {
         unsafe { mem::transmute(self.nt_headers) }
     }
     #[inline(always)]
@@ -207,11 +217,11 @@ impl PE<NtHeaders> {
         self.nt_headers32().Signature
     }
     #[inline(always)]
-    pub fn file_header(&self) -> &'static IMAGE_FILE_HEADER {
+    pub fn file_header(&self) -> &'a IMAGE_FILE_HEADER {
         &self.nt_headers32().FileHeader
     }
     #[inline(always)]
-    pub fn optional_header(&self) -> PE<ImageOptionalHeader> {
+    pub fn optional_header(&self) -> PE<'a, ImageOptionalHeader> {
         PE {
             base_address: self.base_address,
             dos_header: self.dos_header,
@@ -232,17 +242,17 @@ impl PE<NtHeaders> {
     }
 }
 
-impl PE<ImageOptionalHeader> {
+impl<'a> PE<'a, ImageOptionalHeader> {
     #[inline(always)]
     pub fn address(&self) -> usize {
         self.image_optional_header
     }
     #[inline(always)]
-    fn optional_header32(&self) -> &'static IMAGE_OPTIONAL_HEADER32 {
+    fn optional_header32(&self) -> &'a IMAGE_OPTIONAL_HEADER32 {
         unsafe { mem::transmute(self.image_optional_header) }
     }
     #[inline(always)]
-    fn optional_header64(&self) -> &'static IMAGE_OPTIONAL_HEADER64 {
+    fn optional_header64(&self) -> &'a IMAGE_OPTIONAL_HEADER64 {
         unsafe { mem::transmute(self.image_optional_header) }
     }
     #[inline(always)]
@@ -446,7 +456,7 @@ impl PE<ImageOptionalHeader> {
         }
     }
     #[inline(always)]
-    pub fn data_directory(&self) -> &'static [IMAGE_DATA_DIRECTORY; 16] {
+    pub fn data_directory(&self) -> &'a [IMAGE_DATA_DIRECTORY; 16] {
         if self.is_64bit {
             &self.optional_header64().DataDirectory
         } else {
@@ -463,10 +473,10 @@ impl PE<ImageOptionalHeader> {
     }
 }
 
-fn get_resource_data_entry(
+fn get_resource_data_entry<'a>(
     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
     resource_id: u32,
-) -> Option<&'static RESOURCE_DATA_ENTRY> {
+) -> Option<&'a RESOURCE_DATA_ENTRY> {
     unsafe {
         let resource_directory_table_addr = addr_of!(*resource_directory_table) as usize;
 
@@ -544,9 +554,7 @@ unsafe fn get_entry_offset_by_name(
 #[cfg(test)]
 mod tests {
     use crate::util::strlen;
-    use crate::windows::kernel32::{
-        GetModuleHandleA, GetSystemDirectoryA, MAX_PATH,
-    };
+    use crate::windows::kernel32::{GetModuleHandleA, GetSystemDirectoryA, MAX_PATH};
     use crate::windows::pe::PE;
     use std::fs;
 
@@ -554,7 +562,7 @@ mod tests {
     fn pe_from_memory_address() {
         unsafe {
             let addr = GetModuleHandleA(0 as *const u8);
-            let pe = PE::from_addr(addr).unwrap();
+            let pe = PE::from_address(addr).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
         }
     }
@@ -566,7 +574,7 @@ mod tests {
             GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
             let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
             let file = fs::read(format!("{path}\\..\\SysWOW64\\notepad.exe")).unwrap();
-            let pe = PE::from_ptr(file.as_ptr()).unwrap();
+            let pe = PE::from_slice(file.as_slice()).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x014C)
         }
     }
@@ -578,8 +586,24 @@ mod tests {
             GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
             let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
             let file = fs::read(format!("{path}\\notepad.exe")).unwrap();
-            let pe = PE::from_ptr(file.as_ptr()).unwrap();
+            let pe = PE::from_slice(file.as_slice()).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
         }
     }
+
+    // This test should not compile.
+    // #[test]
+    // fn pe_from_file_lifetime_fail() {
+    //     unsafe {
+    //         let mut buffer = [0; MAX_PATH + 1];
+    //         GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
+    //         let pe;
+    //         let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
+    //         {
+    //             let file = fs::read(format!("{path}\\notepad.exe")).unwrap();
+    //             pe = PE::from_slice(file.as_slice()).unwrap();
+    //         }
+    //         assert_ne!(pe.nt_headers().file_header().Machine, 0x8664)
+    //     }
+    // }
 }
