@@ -53,19 +53,21 @@ pub type FnGetLastError = unsafe extern "system" fn() -> u32;
 pub type FnGetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
 pub type FnGetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
 pub type FnGetProcAddress =
-    unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FnFindResourceA =
-    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type FnFreeConsole = unsafe extern "system" fn() -> u32;
+pub type FnGetSystemDirectoryA = unsafe extern "system" fn(lpBuffer: *mut u8, uSize: u32) -> u32;
+pub type FnGetSystemDirectoryW = unsafe extern "system" fn(lpBuffer: *mut u16, uSize: u32) -> u32;
 pub type FnLoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
 pub type FnLockResource = unsafe extern "system" fn(hResData: usize) -> *const u8;
 pub type FnSizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
 pub type FnCreateToolhelp32Snapshot =
-    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type FnProcess32First =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnProcess32Next =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
 pub type FnOpenFile = unsafe extern "system" fn(
     lpFileName: *const u8,
@@ -73,7 +75,7 @@ pub type FnOpenFile = unsafe extern "system" fn(
     uStyle: u32,
 ) -> i32;
 pub type FnOpenProcess =
-    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type FnIsProcessorFeaturePresent = unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
 pub type FnResumeThread = unsafe extern "system" fn(hThread: usize) -> u32;
 pub type FnSetStdHandle = unsafe extern "system" fn(nStdHandle: u32, hHandle: usize) -> u32;
@@ -97,7 +99,7 @@ pub type FnVirtualProtect = unsafe extern "system" fn(
     lpflOldProtect: *mut u32,
 ) -> u32;
 pub type FnVirtualFree =
-    unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
+unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
 pub type FnVirtualFreeEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -128,7 +130,7 @@ pub type FnCreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type FnWaitForSingleObject =
-    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 pub type FnGetCurrentProcess = unsafe extern "system" fn() -> usize;
 
 pub const PROCESS_TERMINATE: u32 = 0x0001;
@@ -750,6 +752,21 @@ pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
     getProcAddress(hModule, lpProcName)
 }
 
+pub unsafe fn GetSystemDirectoryA(lpBuffer: *mut u8, uSize: u32) -> u32 {
+    let getSystemDirectoryA: FnGetSystemDirectoryA = std::mem::transmute(GetProcAddressInternal(GetModuleHandleInternal("KERNEL32.DLL".as_bytes())
+                                                                                                , "GetSystemDirectoryA".as_bytes()));
+
+    getSystemDirectoryA(lpBuffer, uSize)
+}
+
+pub unsafe fn GetSystemDirectoryW(lpBuffer: *mut u16, uSize: u32) -> u32 {
+    let getSystemDirectoryW: FnGetSystemDirectoryW = std::mem::transmute(GetProcAddressInternal(GetModuleHandleInternal("KERNEL32.DLL".as_bytes())
+                                                                                                , "GetSystemDirectoryW".as_bytes()));
+
+    getSystemDirectoryW(lpBuffer, uSize)
+}
+
+
 pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uStyle: u32) -> i32 {
     let openFile: FnOpenFile = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
@@ -1090,6 +1107,7 @@ pub unsafe fn GetCurrentProcess() -> usize {
 
 #[cfg(test)]
 mod tests {
+    use crate::util::strlenw;
     use super::*;
 
     #[test]
@@ -1216,6 +1234,25 @@ mod tests {
                 "LoadLibraryA\0".as_ptr(),
             );
             assert_eq!(load_library_a_handle_x, load_library_a_handle);
+        }
+    }
+
+    #[test]
+    fn get_system_directory_a() {
+        unsafe {
+            let mut buffer = [0; MAX_PATH + 1];
+            let out = GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
+            let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
+            assert!(path.ends_with(r"\Windows\system32"))
+        }
+    }
+    #[test]
+    fn get_system_directory_w() {
+        unsafe {
+            let mut buffer = [0; MAX_PATH + 1];
+            let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
+            let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
+            assert!(path.ends_with(r"\Windows\system32"))
         }
     }
 }

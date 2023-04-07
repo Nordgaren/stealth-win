@@ -106,6 +106,16 @@ pub fn strlen(s: *const u8) -> usize {
     len
 }
 
+// Need internal function for this in unmapped PE state.
+pub fn strlenw(s: *const u16) -> usize {
+    let mut len = 0;
+    while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {
+        len += 1;
+    }
+
+    len
+}
+
 #[inline(always)]
 pub fn strlen_with_null(s: *const u8) -> usize {
     strlen(s) + 1
