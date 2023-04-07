@@ -119,11 +119,7 @@ impl<'a> PE<'a, Base> {
     }
     pub fn rva_to_foa(&self, rva: u32) -> Option<u32> {
         unsafe {
-            let section_headers_pointer = self.nt_headers().address() + self.nt_headers().size_of();
-            let section_headers = std::slice::from_raw_parts(
-                section_headers_pointer as *const IMAGE_SECTION_HEADER,
-                self.nt_headers().file_header().NumberOfSections as usize,
-            );
+            let section_headers = self.image_section_headers();
 
             if rva < section_headers[0].PointerToRawData {
                 return Some(rva);
@@ -187,6 +183,16 @@ impl<'a> PE<'a, Base> {
             is_64bit: self.is_64bit,
             is_mapped: self.is_mapped,
             phantom_data: PhantomData,
+        }
+    }
+    #[inline(always)]
+    pub fn image_section_headers(&self) -> &'a [IMAGE_SECTION_HEADER] {
+        let section_headers_pointer = self.nt_headers().address() + self.nt_headers().size_of();
+        unsafe {
+            std::slice::from_raw_parts(
+                section_headers_pointer as *const IMAGE_SECTION_HEADER,
+                self.nt_headers().file_header().NumberOfSections as usize,
+            )
         }
     }
     #[inline(always)]

@@ -3,6 +3,12 @@ A Windows framework for hiding strings and obfuscating function calls in Rust. C
 XOR'd strings and AES encrypted payloads.  
 
 # Features
+### PE Reader
+This is a class that will allow you to read a PE, regardless of if it is 32 bit or 64 bit. It is abstracted away with the use of
+if statements and TypeState abstraction. In it's current implementation, there is a possibility the compiler eventually uses
+memcpy (This was an issue with my first implementation, too). memcpy will cause this to not work in an unmapped PE, which is 
+bad, because the Win API functions use it to get the resource from the consuming executable.  
+
 ### Resource File
 Resource file built with the build script every time build is ran. Randomizes the position of strings and payload, as well as
 padding between entries. This resource is put into your final EXE and can be indexed using `util::get_resource_bytes` with
