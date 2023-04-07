@@ -753,19 +753,30 @@ pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
 }
 
 pub unsafe fn GetSystemDirectoryA(lpBuffer: *mut u8, uSize: u32) -> u32 {
-    let getSystemDirectoryA: FnGetSystemDirectoryA = std::mem::transmute(GetProcAddressInternal(GetModuleHandleInternal("KERNEL32.DLL".as_bytes())
-                                                                                                , "GetSystemDirectoryA".as_bytes()));
+    let getSystemDirectoryA: FnGetSystemDirectoryA = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETSYSTEMDIRECTORYA_POS, GETSYSTEMDIRECTORYA_LEN),
+        get_resource_bytes(RESOURCE_ID, GETSYSTEMDIRECTORYA_KEY, GETSYSTEMDIRECTORYA_LEN),
+    ));
 
     getSystemDirectoryA(lpBuffer, uSize)
 }
 
 pub unsafe fn GetSystemDirectoryW(lpBuffer: *mut u16, uSize: u32) -> u32 {
-    let getSystemDirectoryW: FnGetSystemDirectoryW = std::mem::transmute(GetProcAddressInternal(GetModuleHandleInternal("KERNEL32.DLL".as_bytes())
-                                                                                                , "GetSystemDirectoryW".as_bytes()));
+    let getSystemDirectoryW: FnGetSystemDirectoryW = std::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETSYSTEMDIRECTORYW_POS, GETSYSTEMDIRECTORYW_LEN),
+        get_resource_bytes(RESOURCE_ID, GETSYSTEMDIRECTORYW_KEY, GETSYSTEMDIRECTORYW_LEN),
+    ));
 
     getSystemDirectoryW(lpBuffer, uSize)
 }
-
 
 pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uStyle: u32) -> i32 {
     let openFile: FnOpenFile = std::mem::transmute(GetProcAddressX(

@@ -37,6 +37,14 @@ impl<'a, T> PE<'a, T> {
     pub fn base_address(&self) -> usize {
         self.base_address
     }
+    #[inline(always)]
+    pub fn is_64bit(&self) -> bool {
+        self.is_64bit
+    }
+    #[inline(always)]
+    pub fn is_mapped(&self) -> bool {
+        self.is_mapped
+    }
 }
 
 impl<'a> PE<'a, Base> {
@@ -194,14 +202,6 @@ impl<'a> PE<'a, Base> {
                 self.nt_headers().file_header().NumberOfSections as usize,
             )
         }
-    }
-    #[inline(always)]
-    pub fn is_64bit(&self) -> bool {
-        self.is_64bit
-    }
-    #[inline(always)]
-    pub fn is_mapped(&self) -> bool {
-        self.is_mapped
     }
 }
 
@@ -598,6 +598,13 @@ mod tests {
     }
 
     // This test should not compile.
+    //     |
+    // 617 |                 pe = PE::from_slice(file.as_slice()).unwrap();
+    //     |                                     ^^^^^^^^^^^^^^^ borrowed value does not live long enough
+    // 618 |             }
+    //     |             - `file` dropped here while still borrowed
+    // 619 |             assert_ne!(pe.nt_headers().file_header().Machine, 0x8664)
+    //     |                        --------------- borrow later used here
     // #[test]
     // fn pe_from_file_lifetime_fail() {
     //     unsafe {
