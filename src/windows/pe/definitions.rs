@@ -41,9 +41,9 @@ pub(super) struct IMAGE_OPTIONAL_HEADER32 {
     pub Subsystem: u16,
     pub DllCharacteristics: u16,
     pub SizeOfStackReserve: u32, //usize
-    pub SizeOfStackCommit: u32, //usize
-    pub SizeOfHeapReserve: u32, //usize
-    pub SizeOfHeapCommit: u32, //usize
+    pub SizeOfStackCommit: u32,  //usize
+    pub SizeOfHeapReserve: u32,  //usize
+    pub SizeOfHeapCommit: u32,   //usize
     pub LoaderFlags: u32,
     pub NumberOfRvaAndSizes: u32,
     pub DataDirectory: [IMAGE_DATA_DIRECTORY; 16],
@@ -75,9 +75,9 @@ pub(super) struct IMAGE_OPTIONAL_HEADER64 {
     pub Subsystem: u16,
     pub DllCharacteristics: u16,
     pub SizeOfStackReserve: u64, //usize
-    pub SizeOfStackCommit: u64, //usize
-    pub SizeOfHeapReserve: u64, //usize
-    pub SizeOfHeapCommit: u64, //usize
+    pub SizeOfStackCommit: u64,  //usize
+    pub SizeOfHeapReserve: u64,  //usize
+    pub SizeOfHeapCommit: u64,   //usize
     pub LoaderFlags: u32,
     pub NumberOfRvaAndSizes: u32,
     pub DataDirectory: [IMAGE_DATA_DIRECTORY; 16],

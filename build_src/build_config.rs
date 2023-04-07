@@ -17,9 +17,7 @@ pub const PAD_RANGE: RangeInclusive<usize> = RANGE_START..=RANGE_END;
 // Any strings placed in here will be embedded in the PE resource, with a constant named after the string
 // I.E. TEST_STRING
 lazy_static! {
-    pub static ref USER_STRINGS: Vec<&'static str> = vec![
-
-    ];
+    pub static ref USER_STRINGS: Vec<&'static str> = vec![];
 }
 
 // Will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build'

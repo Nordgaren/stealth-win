@@ -44,7 +44,7 @@ impl PE {
         unsafe {
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address as usize);
             let nt_headers: &IMAGE_NT_HEADERS =
-                mem::transmute((base_address + dos_header.e_lfanew as u64)as usize);
+                mem::transmute((base_address + dos_header.e_lfanew as u64) as usize);
 
             if dos_header.e_magic != IMAGE_DOS_SIGNATURE
                 && nt_headers.Signature != IMAGE_NT_SIGNATURE
@@ -69,7 +69,7 @@ impl PE {
         unsafe {
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address as usize);
             let nt_headers: &IMAGE_NT_HEADERS =
-                mem::transmute((base_address + dos_header.e_lfanew as u64)as usize);
+                mem::transmute((base_address + dos_header.e_lfanew as u64) as usize);
 
             let is_64bit = nt_headers.FileHeader.Machine == 0x8664;
             let mut pe = PE {
@@ -87,7 +87,9 @@ impl PE {
     fn set_is_mapped(&mut self) {
         unsafe {
             let first_section: &IMAGE_SECTION_HEADER = mem::transmute(
-                (self.base_address + self.dos_header().e_lfanew as u64 + self.nt_headers().size_of())as usize,
+                (self.base_address
+                    + self.dos_header().e_lfanew as u64
+                    + self.nt_headers().size_of()) as usize,
             );
             let section_on_disk = self.base_address + first_section.PointerToRawData as u64;
             let ptr_to_zero = section_on_disk as *const u64;
@@ -134,30 +136,30 @@ impl PE {
                 }
             }
         }
+        unsafe {
+            let resource_directory_table: &RESOURCE_DIRECTORY_TABLE = mem::transmute(
+                (self.base_address + resource_directory_table_offset as u64) as usize,
+            );
 
-        let resource_directory_table: &RESOURCE_DIRECTORY_TABLE = unsafe {
-            mem::transmute((self.base_address as u64 + resource_directory_table_offset as u64)as usize)
-        };
-        let resource_data_entry =
-            match get_resource_data_entry(resource_directory_table, resource_id) {
-                Some(entry) => entry,
-                _ => {
-                    return None;
-                }
-            };
+            let resource_data_entry =
+                match get_resource_data_entry(resource_directory_table, resource_id) {
+                    Some(e) => e,
+                    _ => {
+                        return None;
+                    }
+                };
 
-        let mut data_offset = resource_data_entry.DataRVA;
-        if !self.is_mapped {
-            data_offset = match self.rva_to_foa(data_offset) {
-                Some(o) => o,
-                None => {
-                    return None;
+            let mut data_offset = resource_data_entry.DataRVA;
+            if !self.is_mapped {
+                data_offset = match self.rva_to_foa(data_offset) {
+                    Some(o) => o,
+                    None => {
+                        return None;
+                    }
                 }
             }
-        }
 
-        let data = self.base_address + data_offset as u64;
-        unsafe {
+            let data = self.base_address + data_offset as u64;
             Some(std::slice::from_raw_parts(
                 data as *const u8,
                 resource_data_entry.DataSize as usize,
@@ -220,7 +222,7 @@ impl NtHeaders {
         self.as_nt_headers32.Signature
     }
     #[inline(always)]
-    pub fn file_header(&self) -> &IMAGE_FILE_HEADER {
+    pub fn file_header(&self) -> &'static IMAGE_FILE_HEADER {
         &self.as_nt_headers32.FileHeader
     }
     #[inline(always)]
