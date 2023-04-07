@@ -17,10 +17,10 @@ use std::{mem, slice};
 mod definitions;
 
 pub struct PE<T> {
-    base_address: u64,
+    base_address: usize,
     dos_header: &'static IMAGE_DOS_HEADER,
-    nt_headers: u64,
-    image_optional_header: u64,
+    nt_headers: usize,
+    image_optional_header: usize,
     is_64bit: bool,
     is_mapped: bool,
     phantom_data: PhantomData<T>,
@@ -31,7 +31,7 @@ pub struct ImageOptionalHeader;
 
 impl<T> PE<T> {
     #[inline(always)]
-    pub fn base_address(&self) -> u64 {
+    pub fn base_address(&self) -> usize {
         self.base_address
     }
 }
@@ -39,17 +39,17 @@ impl<T> PE<T> {
 impl PE<Base> {
     #[inline(always)]
     pub fn from_ptr(ptr: *const u8) -> Result<Self, ()> {
-        Self::from_addr(ptr as u64)
+        Self::from_addr(ptr as usize)
     }
     #[inline(always)]
     pub fn from_ptr_unchecked(ptr: *const u8) -> Self {
-        Self::from_addr_unchecked(ptr as u64)
+        Self::from_addr_unchecked(ptr as usize)
     }
-    pub fn from_addr(base_address: u64) -> Result<Self, ()> {
+    pub fn from_addr(base_address: usize) -> Result<Self, ()> {
         unsafe {
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address as usize);
             let nt_headers: &IMAGE_NT_HEADERS =
-                mem::transmute((base_address + dos_header.e_lfanew as u64) as usize);
+                mem::transmute(base_address + dos_header.e_lfanew as usize);
 
             if dos_header.e_magic != IMAGE_DOS_SIGNATURE
                 && nt_headers.Signature != IMAGE_NT_SIGNATURE
@@ -61,8 +61,8 @@ impl PE<Base> {
             let mut pe = PE {
                 base_address,
                 dos_header,
-                nt_headers: addr_of!(*nt_headers) as u64,
-                image_optional_header: addr_of!(nt_headers.OptionalHeader) as u64,
+                nt_headers: addr_of!(*nt_headers) as usize,
+                image_optional_header: addr_of!(nt_headers.OptionalHeader) as usize,
                 is_64bit,
                 is_mapped: false,
                 phantom_data: PhantomData,
@@ -72,18 +72,18 @@ impl PE<Base> {
             Ok(pe)
         }
     }
-    pub fn from_addr_unchecked(base_address: u64) -> Self {
+    pub fn from_addr_unchecked(base_address: usize) -> Self {
         unsafe {
             let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address as usize);
             let nt_headers: &IMAGE_NT_HEADERS =
-                mem::transmute((base_address + dos_header.e_lfanew as u64) as usize);
+                mem::transmute(base_address + dos_header.e_lfanew as usize);
 
             let is_64bit = nt_headers.FileHeader.Machine == 0x8664;
             let mut pe = PE {
                 base_address,
                 dos_header,
-                nt_headers: addr_of!(*nt_headers) as u64,
-                image_optional_header: addr_of!(nt_headers.OptionalHeader) as u64,
+                nt_headers: addr_of!(*nt_headers) as usize,
+                image_optional_header: addr_of!(nt_headers.OptionalHeader) as usize,
                 is_64bit,
                 is_mapped: false,
                 phantom_data: PhantomData,
@@ -97,11 +97,11 @@ impl PE<Base> {
         unsafe {
             let first_section: &IMAGE_SECTION_HEADER = mem::transmute(
                 (self.base_address
-                    + self.dos_header().e_lfanew as u64
-                    + self.nt_headers().size_of()) as usize,
+                    + self.dos_header().e_lfanew as usize
+                    + self.nt_headers().size_of()),
             );
-            let section_on_disk = self.base_address + first_section.PointerToRawData as u64;
-            let ptr_to_zero = section_on_disk as *const u64;
+            let section_on_disk = self.base_address + first_section.PointerToRawData as usize;
+            let ptr_to_zero = section_on_disk as *const usize;
 
             self.is_mapped = *ptr_to_zero == 0
         }
@@ -141,7 +141,7 @@ impl PE<Base> {
         }
         unsafe {
             let resource_directory_table: &RESOURCE_DIRECTORY_TABLE = mem::transmute(
-                (self.base_address + resource_directory_table_offset as u64) as usize,
+                self.base_address + resource_directory_table_offset as usize,
             );
 
             let resource_data_entry =
@@ -152,7 +152,7 @@ impl PE<Base> {
                 data_offset = self.rva_to_foa(data_offset)?
             }
 
-            let data = self.base_address + data_offset as u64;
+            let data = self.base_address + data_offset as usize;
             Some(std::slice::from_raw_parts(
                 data as *const u8,
                 resource_data_entry.DataSize as usize,
@@ -160,7 +160,7 @@ impl PE<Base> {
         }
     }
     #[inline(always)]
-    pub fn address(&self) -> u64 {
+    pub fn address(&self) -> usize {
         self.base_address
     }
     #[inline(always)]
@@ -191,16 +191,16 @@ impl PE<Base> {
 
 impl PE<NtHeaders> {
     #[inline(always)]
-    pub fn address(&self) -> u64 {
+    pub fn address(&self) -> usize {
         self.nt_headers
     }
     #[inline(always)]
     fn nt_headers32(&self) -> &'static IMAGE_NT_HEADERS32 {
-        unsafe { mem::transmute(self.nt_headers as usize) }
+        unsafe { mem::transmute(self.nt_headers) }
     }
     #[inline(always)]
     fn nt_headers64(&self) -> &'static IMAGE_NT_HEADERS64 {
-        unsafe { mem::transmute(self.nt_headers as usize) }
+        unsafe { mem::transmute(self.nt_headers) }
     }
     #[inline(always)]
     pub fn signature(&self) -> u32 {
@@ -223,27 +223,27 @@ impl PE<NtHeaders> {
         }
     }
     #[inline(always)]
-    pub fn size_of(&self) -> u64 {
+    pub fn size_of(&self) -> usize {
         if self.is_64bit {
-            size_of::<IMAGE_NT_HEADERS64>() as u64
+            size_of::<IMAGE_NT_HEADERS64>() as usize
         } else {
-            size_of::<IMAGE_NT_HEADERS32>() as u64
+            size_of::<IMAGE_NT_HEADERS32>() as usize
         }
     }
 }
 
 impl PE<ImageOptionalHeader> {
     #[inline(always)]
-    pub fn address(&self) -> u64 {
+    pub fn address(&self) -> usize {
         self.image_optional_header
     }
     #[inline(always)]
     fn optional_header32(&self) -> &'static IMAGE_OPTIONAL_HEADER32 {
-        unsafe { mem::transmute(self.image_optional_header as usize) }
+        unsafe { mem::transmute(self.image_optional_header) }
     }
     #[inline(always)]
     fn optional_header64(&self) -> &'static IMAGE_OPTIONAL_HEADER64 {
-        unsafe { mem::transmute(self.image_optional_header as usize) }
+        unsafe { mem::transmute(self.image_optional_header) }
     }
     #[inline(always)]
     pub fn magic(&self) -> u16 {
@@ -454,11 +454,11 @@ impl PE<ImageOptionalHeader> {
         }
     }
     #[inline(always)]
-    pub fn size_of(&self) -> u64 {
+    pub fn size_of(&self) -> usize {
         if self.is_64bit {
-            size_of::<IMAGE_OPTIONAL_HEADER64>() as u64
+            size_of::<IMAGE_OPTIONAL_HEADER64>() as usize
         } else {
-            size_of::<IMAGE_OPTIONAL_HEADER32>() as u64
+            size_of::<IMAGE_OPTIONAL_HEADER32>() as usize
         }
     }
 }
@@ -554,7 +554,7 @@ mod tests {
     fn pe_from_memory_address() {
         unsafe {
             let addr = GetModuleHandleA(0 as *const u8);
-            let pe = PE::from_addr(addr as u64).unwrap();
+            let pe = PE::from_addr(addr).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
         }
     }

@@ -15,7 +15,7 @@ use std::mem::size_of;
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe {
-        PE::from_addr_unchecked(get_dll_base() as u64)
+        PE::from_addr_unchecked(get_dll_base())
             .get_pe_resource(resource_id)
             .unwrap()
     };
