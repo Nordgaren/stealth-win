@@ -14,15 +14,17 @@ use std::ffi::CStr;
 use std::mem;
 use std::mem::size_of;
 use std::ptr::{addr_of, addr_of_mut};
+use crate::windows::pe::PE;
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe {
-        let base_address = get_dll_base();
-        if check_mapped(base_address) {
-            get_resource_mapped(base_address, resource_id)
-        } else {
-            get_resource_unmapped(base_address, resource_id)
-        }
+        // let base_address = get_dll_base();
+        // if check_mapped(base_address) {
+        //     get_resource_mapped(base_address, resource_id)
+        // } else {
+        //     get_resource_unmapped(base_address, resource_id)
+        // }
+        PE::from_addr_unchecked(unsafe {get_dll_base() as u64}).get_pe_resource(resource_id).unwrap()
     };
 
     let end = offset + len;
@@ -105,7 +107,7 @@ unsafe fn get_entry_offset_by_id(
     let resource_entries_address = addr_of!(*resource_directory_table) as usize
         + size_of::<RESOURCE_DIRECTORY_TABLE>()
         + (size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>()
-            * resource_directory_table.NumberOfNameEntries as usize);
+        * resource_directory_table.NumberOfNameEntries as usize);
     let resource_directory_entries = std::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
         resource_directory_table.NumberOfIDEntries as usize,
@@ -212,23 +214,28 @@ unsafe fn rva_to_foa(nt_headers: &IMAGE_NT_HEADERS, rva: u32) -> u32 {
 
     return 0;
 }
+
 // These are macros in the windows headers. Didn't feel like they would be good rust macros.
 #[inline(always)]
 pub fn lo_word(n: usize) -> u16 {
     (n & 0xFFFF) as u16
 }
+
 #[inline(always)]
 pub fn hi_word(n: usize) -> u16 {
     ((n >> 16) & 0xFFFF) as u16
 }
+
 #[inline(always)]
 pub fn lo_byte(n: usize) -> u8 {
     (n & 0xFF) as u8
 }
+
 #[inline(always)]
 pub fn hi_byte(n: usize) -> u8 {
     ((n >> 8) & 0xFF) as u8
 }
+
 //
 pub fn find_char(string: &[u8], char: u8) -> Option<usize> {
     string.into_iter().position(|c| *c == char)
@@ -243,6 +250,7 @@ pub fn strlen(s: *const u8) -> usize {
 
     len
 }
+
 #[inline(always)]
 pub fn strlen_with_null(s: *const u8) -> usize {
     strlen(s) + 1
