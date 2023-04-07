@@ -19,7 +19,6 @@ pub struct PE {
     base_address: u64,
     dos_header: &'static IMAGE_DOS_HEADER,
     nt_headers: u64,
-    //nt_headers: NtHeaders,
     is_64bit: bool,
     is_mapped: bool,
 }
@@ -128,13 +127,7 @@ impl PE {
 
         let mut resource_directory_table_offset = resource_data_dir.VirtualAddress;
         if !self.is_mapped {
-            resource_directory_table_offset = match self.rva_to_foa(resource_directory_table_offset)
-            {
-                Some(o) => o,
-                None => {
-                    return None;
-                }
-            }
+            resource_directory_table_offset = self.rva_to_foa(resource_directory_table_offset)?
         }
         unsafe {
             let resource_directory_table: &RESOURCE_DIRECTORY_TABLE = mem::transmute(
@@ -142,21 +135,11 @@ impl PE {
             );
 
             let resource_data_entry =
-                match get_resource_data_entry(resource_directory_table, resource_id) {
-                    Some(e) => e,
-                    _ => {
-                        return None;
-                    }
-                };
+                get_resource_data_entry(resource_directory_table, resource_id)?;
 
             let mut data_offset = resource_data_entry.DataRVA;
             if !self.is_mapped {
-                data_offset = match self.rva_to_foa(data_offset) {
-                    Some(o) => o,
-                    None => {
-                        return None;
-                    }
-                }
+                data_offset = self.rva_to_foa(data_offset)?
             }
 
             let data = self.base_address + data_offset as u64;
@@ -480,24 +463,13 @@ fn get_resource_data_entry(
         let resource_directory_table_addr = addr_of!(*resource_directory_table) as usize;
 
         //level 1: Resource type directory
-        let mut offset = match get_entry_offset_by_id(resource_directory_table, RT_RCDATA as u32) {
-            Some(o) => o,
-            _ => {
-                return None;
-            }
-        };
+        let mut offset = get_entry_offset_by_id(resource_directory_table, RT_RCDATA as u32)?;
         offset &= 0x7FFFFFFF;
 
         //level 2: Resource Name/ID subdirectory
         let resource_directory_table_name_id: &RESOURCE_DIRECTORY_TABLE =
             mem::transmute(resource_directory_table_addr + offset as usize);
-        let mut offset = match get_entry_offset_by_id(resource_directory_table_name_id, resource_id)
-        {
-            Some(o) => o,
-            _ => {
-                return None;
-            }
-        };
+        let mut offset = get_entry_offset_by_id(resource_directory_table_name_id, resource_id)?;
         offset &= 0x7FFFFFFF;
 
         //level 3: language subdirectory - just use the first entry.
