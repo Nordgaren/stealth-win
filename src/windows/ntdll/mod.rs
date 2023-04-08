@@ -2,13 +2,13 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use std::arch::global_asm;
 use crate::consts::{
     NTDLL_DLL_KEY, NTDLL_DLL_LEN, NTDLL_DLL_POS, NTFLUSHINSTRUCTIONCACHE_KEY,
     NTFLUSHINSTRUCTIONCACHE_LEN, NTFLUSHINSTRUCTIONCACHE_POS, RESOURCE_ID,
 };
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddressX};
+use std::arch::global_asm;
 
 pub type FnDllMain =
     extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;

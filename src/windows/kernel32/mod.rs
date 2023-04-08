@@ -13,10 +13,10 @@ use crate::util::{
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
 use std::ffi::{c_char, CStr, CString};
+use std::mem;
 use std::ptr::{addr_of, addr_of_mut};
 use std::slice::from_raw_parts;
 use std::str::Utf8Error;
-use std::mem;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
@@ -569,8 +569,8 @@ pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorName: &[u8], sKey: &[u8]) ->
         }
     }
 
-    if pProcAddr >= addr_of!(pExportDirAddr) as usize
-        && pProcAddr < addr_of!(pExportDirAddr) as usize + pExportDataDir.Size as usize
+    if pProcAddr >= addr_of!(*pExportDirAddr) as usize
+        && pProcAddr < addr_of!(*pExportDirAddr) as usize + pExportDataDir.Size as usize
     {
         pProcAddr = get_fwd_addr(pProcAddr);
     }
