@@ -125,6 +125,36 @@ impl<'a> PE<'a, Base> {
             self.is_mapped = *ptr_to_zero == 0
         }
     }
+    #[inline(always)]
+    pub fn address(&self) -> usize {
+        self.base_address
+    }
+    #[inline(always)]
+    pub fn dos_header(&self) -> &'a IMAGE_DOS_HEADER {
+        self.dos_header
+    }
+    #[inline(always)]
+    pub fn nt_headers(&self) -> PE<'a, NtHeaders> {
+        PE {
+            base_address: self.base_address,
+            dos_header: self.dos_header,
+            nt_headers: self.nt_headers,
+            image_optional_header: self.image_optional_header,
+            is_64bit: self.is_64bit,
+            is_mapped: self.is_mapped,
+            phantom_data: PhantomData,
+        }
+    }
+    #[inline(always)]
+    pub fn image_section_headers(&self) -> &'a [IMAGE_SECTION_HEADER] {
+        let section_headers_pointer = self.nt_headers().address() + self.nt_headers().size_of();
+        unsafe {
+            std::slice::from_raw_parts(
+                section_headers_pointer as *const IMAGE_SECTION_HEADER,
+                self.nt_headers().file_header().NumberOfSections as usize,
+            )
+        }
+    }
     pub fn rva_to_foa(&self, rva: u32) -> Option<u32> {
         unsafe {
             let section_headers = self.image_section_headers();
@@ -171,36 +201,6 @@ impl<'a> PE<'a, Base> {
                 data as *const u8,
                 resource_data_entry.DataSize as usize,
             ))
-        }
-    }
-    #[inline(always)]
-    pub fn address(&self) -> usize {
-        self.base_address
-    }
-    #[inline(always)]
-    pub fn dos_header(&self) -> &'a IMAGE_DOS_HEADER {
-        self.dos_header
-    }
-    #[inline(always)]
-    pub fn nt_headers(&self) -> PE<'a, NtHeaders> {
-        PE {
-            base_address: self.base_address,
-            dos_header: self.dos_header,
-            nt_headers: self.nt_headers,
-            image_optional_header: self.image_optional_header,
-            is_64bit: self.is_64bit,
-            is_mapped: self.is_mapped,
-            phantom_data: PhantomData,
-        }
-    }
-    #[inline(always)]
-    pub fn image_section_headers(&self) -> &'a [IMAGE_SECTION_HEADER] {
-        let section_headers_pointer = self.nt_headers().address() + self.nt_headers().size_of();
-        unsafe {
-            std::slice::from_raw_parts(
-                section_headers_pointer as *const IMAGE_SECTION_HEADER,
-                self.nt_headers().file_header().NumberOfSections as usize,
-            )
         }
     }
 }

@@ -12,13 +12,11 @@ use crate::util::{
 #[cfg(test)]
 use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
-use std::arch::global_asm;
 use std::ffi::{c_char, CStr, CString};
-use std::mem::size_of;
 use std::ptr::{addr_of, addr_of_mut};
 use std::slice::from_raw_parts;
 use std::str::Utf8Error;
-use std::{mem, slice};
+use std::mem;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
@@ -420,26 +418,6 @@ pub struct ACL {
     pub AceCount: u16,
     pub Sbz2: u16,
 }
-
-extern "C" {
-    pub fn get_peb() -> &'static PEB;
-}
-#[cfg(all(windows, target_arch = "x86_64"))]
-global_asm!(
-    r"
-.global get_peb
-get_peb:
-    mov rax, gs:0x60
-    ret",
-);
-#[cfg(all(windows, target_arch = "x86"))]
-global_asm!(
-    r"
-.global _get_peb
-_get_peb:
-    mov eax, fs:0x30
-    ret",
-);
 
 pub unsafe fn GetModuleHandleInternal(sModuleName: &[u8]) -> usize {
     let peb = get_peb();
@@ -1157,7 +1135,7 @@ mod tests {
     #[test]
     fn get_module_handle() {
         unsafe {
-            let kernel32 = GetModuleHandleInternal("KERNEL32.DLL".as_bytes());
+            let kernel32 = GetModuleHandleInternal("kernel32.dll".as_bytes());
             assert_ne!(kernel32, 0)
         }
     }
@@ -1166,7 +1144,7 @@ mod tests {
     fn get_proc_address() {
         unsafe {
             let load_library_a_addr = GetProcAddressInternal(
-                GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
+                GetModuleHandleInternal("kernel32.dll".as_bytes()),
                 "LoadLibraryA".as_bytes(),
             );
             assert_ne!(load_library_a_addr, 0)

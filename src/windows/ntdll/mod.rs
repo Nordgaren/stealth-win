@@ -2,6 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
+use std::arch::global_asm;
 use crate::consts::{
     NTDLL_DLL_KEY, NTDLL_DLL_LEN, NTDLL_DLL_POS, NTFLUSHINSTRUCTIONCACHE_KEY,
     NTFLUSHINSTRUCTIONCACHE_LEN, NTFLUSHINSTRUCTIONCACHE_POS, RESOURCE_ID,
@@ -309,6 +310,26 @@ pub const IMAGE_REL_BASED_DIR64: u16 = 10;
 pub const IMAGE_ORDINAL_FLAG: usize = 0x8000000000000000;
 #[cfg(all(target_pointer_width = "32"))]
 pub const IMAGE_ORDINAL_FLAG: usize = 0x80000000;
+
+extern "C" {
+    pub fn get_peb() -> &'static PEB;
+}
+#[cfg(all(windows, target_arch = "x86_64"))]
+global_asm!(
+    r"
+.global get_peb
+get_peb:
+    mov rax, gs:0x60
+    ret",
+);
+#[cfg(all(windows, target_arch = "x86"))]
+global_asm!(
+    r"
+.global _get_peb
+_get_peb:
+    mov eax, fs:0x30
+    ret",
+);
 
 pub unsafe fn NtFlushInstructionCache(hProcess: usize, lpBaseAddress: usize, dwSize: u32) {
     let ntFlushInstructionCache: FnNtFlushInstructionCache = std::mem::transmute(GetProcAddressX(
