@@ -267,6 +267,7 @@ impl<T> Drop for SVec<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     const DUMMY_SLICE: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
     #[test]
@@ -310,6 +311,7 @@ mod tests {
     static mut drop_count: i32 = 0;
 
     struct DropTest(i32);
+
     impl Drop for DropTest {
         fn drop(&mut self) {
             unsafe {
@@ -318,18 +320,14 @@ mod tests {
         }
     }
 
-    fn drop_test_function_call() {
-        let mut svec = SVec::new();
-        unsafe {
-            svec.push(DropTest(1));
-        }
-    }
-
     #[test]
     fn drop_test() {
         unsafe {
             drop_count = 1;
-            drop_test_function_call();
+            {
+                let mut svec = SVec::new();
+                svec.push(DropTest(1));
+            }
             assert_eq!(drop_count, 0);
         }
     }
@@ -373,6 +371,7 @@ mod tests {
     }
 
     const GROW_LEN: usize = 10;
+
     #[test]
     fn resize_grow() {
         let mut svec = SVec::new();
@@ -384,6 +383,6 @@ mod tests {
     fn resize_shrink() {
         let mut svec: SVec<u8> = (0..=15).collect();
         svec.resize(10, 0);
-        assert_eq!(&svec[..], &DUMMY_SLICE[..=9])
+        assert_eq!(&svec[..], &DUMMY_SLICE[..10])
     }
 }
