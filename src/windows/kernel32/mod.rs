@@ -10,7 +10,6 @@ use crate::util::{
     compare_xor_str_and_w_str_bytes, find_char, get_resource_bytes, strlen,
 };
 #[cfg(test)]
-use crate::windows::apiset::API_SET_NAMESPACE_V6;
 use crate::windows::ntdll::*;
 use std::ffi::{c_char, CStr, CString};
 use std::mem;

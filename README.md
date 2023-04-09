@@ -1,18 +1,28 @@
 # stealth-win-rs  
 A Windows framework for hiding strings and obfuscating function calls in Rust. Creates and embeds a PE resource with 
-XOR'd strings and AES encrypted payloads.  
+XOR'd strings and AES encrypted payloads on every build.  
 
-# How to use
+# How to use  
 At the moment, the only way to get at the config is by editing the crate itself. It's not ideal, but I haven't figured out a 
 way to get the build script to read something in the project it's been added to. My current suggestion is to clone this crate and
 put it next to your project, in whatever folder you have it in, and import it like so:
 ```toml
-[dependencies]
-stealth-win = {path="../stealth-win"}
+[dependencies]  
+stealth-win = {path="../stealth-win"}  
 ```
 
-You can then 
+You can then edit the config and embed any strings you would like into the PE resource, or change the padding size, etc.   
+The build config is protected by `git update-index --skipworktree`, so your changes won't show up to that file!  If you 
+need to add something to the config while contributing, you can use 
+`git update-index --no-skipworktree ./build_src/build_config.rs` to remove this flag. Just make sure to put it back when 
+you are done!
 
+# Contributing  
+If you would like to add new definitions to the dll modules, just keep the function type and wrapper function definitions 
+in alphabetical order. I will work on making the struct definitions also alphabetical order.  
+
+If you have ned features you'd like to add, just make sure to follow the goals at the bottom of the page. Mainly the implementation
+of features that work in both a mapped and unmapped (like a reflective loader dll) state.  
 
 # Features  
 ### PE Reader  

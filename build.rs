@@ -14,6 +14,14 @@ fn main() {
         _ => {}
     }
 
+    match env::var("NO_BUILD_STEALTH") {
+        Ok(_) => {
+            panic!();
+            return;
+        }
+        _ => {}
+    }
+
     // Get the out dir and pass it into the generator.
     let out_dir = env::var("OUT_DIR").unwrap();
     ResourceGenerator::new(out_dir)
