@@ -22,11 +22,11 @@ lazy_static! {
 
 // Will try to automate the configs stuff, later. At the moment, doesn't work with 'cargo build'
 // Even with switching to windows-rs for build encryption methods, it still doesn't play nice with
-// the cfg defines (but only in the build script. Works fine in `src/`
+// the cfg defines (but only in the build script. Works fine in `src/`)
 // #[cfg(all(windows, target_pointer_width = "64"))]
 // const TARGET_PROCESS: &'static str = "notepad.exe";
-// #[cfg(all(windows, target_pointer_width = "32"))]
-// const TARGET_PROCESS: &'static str = "cheatengine.exe";
+// #[cfg(all(windows, target_pointer_width = "32"))]x32d
+// const TARGET_PROCESS: &'static str = "x32dbg.exe";
 
 // #[cfg(all(windows, target_pointer_width = "64"))]
 // const SHELLCODE_PATH: &'static str = "build_src/shellcode64.bin";

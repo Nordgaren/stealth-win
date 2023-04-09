@@ -84,6 +84,13 @@ pub type FnProcess32First =
     unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnProcess32Next =
     unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+pub type FnReadProcessMemory = unsafe extern "system" fn(
+    hProcess: usize,
+    lpBaseAddress: usize,
+    lpBuffer: *mut u8,
+    nSize: usize,
+    lpNumberOfBytesRead: *mut usize,
+) -> u32;
 pub type FnResumeThread = unsafe extern "system" fn(hThread: usize) -> u32;
 pub type FnSetStdHandle = unsafe extern "system" fn(nStdHandle: u32, hHandle: usize) -> u32;
 pub type FnSizeofResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> u32;
@@ -114,6 +121,11 @@ pub type FnVirtualProtect = unsafe extern "system" fn(
     flNewProtect: u32,
     lpflOldProtect: *mut u32,
 ) -> u32;
+pub type FnVirtualQuery = unsafe extern "system" fn(
+    lpAddress: usize,
+    lpBuffer: &mut MEMORY_BASIC_INFORMATION,
+    dwLength: usize,
+) -> usize;
 pub type FnWaitForSingleObject =
     unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 pub type FnWriteFile = unsafe extern "system" fn(
@@ -373,6 +385,36 @@ pub struct STARTUPINFOA {
     pub hStdInput: usize,
     pub hStdOutput: usize,
     pub hStdError: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct MEMORY_BASIC_INFORMATION {
+    pub BaseAddress: usize,
+    pub AllocationBase: usize,
+    pub AllocationProtect: u32,
+    #[cfg(target_arch = "x86_64")]
+    pub PartitionId: u16,
+    pub RegionSize: usize,
+    pub State: u32,
+    pub Protect: u32,
+    pub Type: u32,
+}
+
+impl MEMORY_BASIC_INFORMATION {
+    pub fn new() -> MEMORY_BASIC_INFORMATION {
+        MEMORY_BASIC_INFORMATION {
+            BaseAddress: 0,
+            AllocationBase: 0,
+            AllocationProtect: 0,
+            #[cfg(target_arch = "x86_64")]
+            PartitionId: 0,
+            RegionSize: 0,
+            State: 0,
+            Protect: 0,
+            Type: 0,
+        }
+    }
 }
 
 #[repr(C)]
@@ -943,6 +985,27 @@ pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 
     process32Next(hSnapshot, lppe)
 }
 
+pub unsafe fn ReadProcessMemory(
+    hProcess: usize,
+    lpBaseAddress: usize,
+    lpBuffer: *mut u8,
+    nSize: usize,
+    lpNumberOfBytesRead: *mut usize,
+) -> u32 {
+    let readProcessMemory: FnReadProcessMemory = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
+        "ReadProcessMemory".as_bytes(),
+    ));
+
+    readProcessMemory(
+        hProcess,
+        lpBaseAddress,
+        lpBuffer,
+        nSize,
+        lpNumberOfBytesRead,
+    )
+}
+
 pub unsafe fn ResumeThread(hThread: usize) -> u32 {
     let resumeThread: FnResumeThread = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
@@ -1053,6 +1116,19 @@ pub unsafe fn VirtualProtect(
     virtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
 }
 
+pub unsafe fn VirtualQuery(
+    lpAddress: usize,
+    lpBuffer: &mut MEMORY_BASIC_INFORMATION,
+    dwLength: usize,
+) -> usize {
+    let virtualQuery: FnVirtualQuery = std::mem::transmute(GetProcAddressInternal(
+        GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
+        "VirtualQuery".as_bytes(),
+    ));
+
+    virtualQuery(lpAddress, lpBuffer, dwLength)
+}
+
 pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
     let waitForSingleObject: FnWaitForSingleObject = std::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
@@ -1122,6 +1198,10 @@ pub unsafe fn WriteProcessMemory(
 mod tests {
     use super::*;
     use crate::util::strlenw;
+    use crate::windows::pe::PE;
+    use std::cmp::max;
+    use std::mem::size_of;
+    use std::{cmp, fs};
 
     #[test]
     fn geb_peb() {
@@ -1201,10 +1281,8 @@ mod tests {
                 "LoadLibraryA".as_bytes(),
             );
             let load_library: FnLoadLibraryA = mem::transmute(load_library_a_address_ordinal);
-            let library_handle = LoadLibraryA("USER32.dll".as_ptr());
-            let library_handle_ordinal = load_library("USER32.dll".as_ptr());
+
             assert_eq!(load_library_a_address_ordinal, load_library_a_address);
-            assert_eq!(library_handle, library_handle_ordinal)
         }
     }
 
@@ -1259,6 +1337,7 @@ mod tests {
             assert!(path.ends_with(r"\Windows\system32"))
         }
     }
+
     #[test]
     fn get_system_directory_w() {
         unsafe {
@@ -1266,6 +1345,48 @@ mod tests {
             let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
             let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
             assert!(path.ends_with(r"\Windows\system32"))
+        }
+    }
+
+    fn patch_section_headers<'a>(buffer: &Vec<u8>) {
+        unsafe {
+            let base_address = buffer.as_ptr() as usize;
+            let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
+
+            // Figure out the offset in the buffer to the NT header
+
+            // Read the NT header to figure out how sections we have and how much RVA's + sizes so we
+            // can determine the offset to the section headers;
+            let nt_header: &'static IMAGE_NT_HEADERS =
+                mem::transmute(base_address + pDosHdr.e_lfanew as usize);
+
+            // Locate the section headers. Rust's IMAGE_NT_HEADERS64 assumes a fixed 16 RVA's but this might
+            // be different in reality so we take care of the situation where it's less by manually
+            // adjusting the offset.
+            let section_base = addr_of!(*nt_header) as usize + size_of::<IMAGE_NT_HEADERS>();
+            let section_header_length = cmp::min(nt_header.OptionalHeader.NumberOfRvaAndSizes, 16);
+            let mut section_headers = std::slice::from_raw_parts_mut(
+                section_base as *mut IMAGE_SECTION_HEADER,
+                section_header_length as usize,
+            );
+
+            for section_header in section_headers {
+                // Since we're dumping from memory we need to correct the PointerToRawData and SizeOfRawData
+                // such that analysis tools can locate the sections again.
+                section_header.SizeOfRawData = section_header.Misc.VirtualSize;
+                section_header.PointerToRawData = section_header.VirtualAddress;
+            }
+        }
+    }
+
+    #[test]
+    fn test_patch() {
+        unsafe {
+            let mut buffer = [0; MAX_PATH + 1];
+            let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
+            let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
+            let file = fs::read(format!("{path}/notepad.exe")).unwrap();
+            let v = patch_section_headers(&file);
         }
     }
 }

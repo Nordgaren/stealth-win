@@ -93,6 +93,7 @@ pub struct IMAGE_OPTIONAL_HEADER {
 }
 
 #[repr(C)]
+//[derive(Debug)]
 pub struct IMAGE_SECTION_HEADER {
     pub Name: [u8; 8],
     pub Misc: IMAGE_SECTION_HEADER_UNION,
@@ -113,6 +114,7 @@ pub union IMAGE_SECTION_HEADER_UNION {
 }
 
 #[repr(C)]
+//#[derive(Debug)]
 pub struct IMAGE_IMPORT_DESCRIPTOR {
     pub Misc: IMAGE_IMPORT_DESCRIPTOR_UNION,
     // 0 if not bound,
@@ -305,6 +307,8 @@ pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_7: u16 = 7;
 pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_8: u16 = 8;
 pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_9: u16 = 9;
 pub const IMAGE_REL_BASED_DIR64: u16 = 10;
+
+pub const MAX_SECTION_HEADER_LEN: u32 = 16;
 
 #[cfg(all(target_pointer_width = "64"))]
 pub const IMAGE_ORDINAL_FLAG: usize = 0x8000000000000000;

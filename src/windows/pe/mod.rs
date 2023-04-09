@@ -1,18 +1,20 @@
 use crate::consts::RT_RCDATA;
-use crate::util::strlen;
+use crate::util::{compare_strs_as_bytes, compare_xor_str_and_str_bytes, strlen};
 use crate::windows::ntdll::{
-    IMAGE_DATA_DIRECTORY, IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE,
-    IMAGE_FILE_HEADER, IMAGE_NT_HEADERS, IMAGE_NT_SIGNATURE, IMAGE_OPTIONAL_HEADER,
-    IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY,
-    RESOURCE_DIRECTORY_TABLE,
+    IMAGE_DATA_DIRECTORY, IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_DIRECTORY_ENTRY_IMPORT,
+    IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_EXPORT_DIRECTORY,
+    IMAGE_FILE_HEADER, IMAGE_IMPORT_DESCRIPTOR, IMAGE_NT_HEADERS, IMAGE_NT_SIGNATURE,
+    IMAGE_OPTIONAL_HEADER, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER,
+    MAX_SECTION_HEADER_LEN, RESOURCE_DATA_ENTRY, RESOURCE_DIRECTORY_TABLE,
 };
 use crate::windows::pe::definitions::{
     IMAGE_NT_HEADERS32, IMAGE_NT_HEADERS64, IMAGE_OPTIONAL_HEADER32, IMAGE_OPTIONAL_HEADER64,
 };
+use std::io::{stdout, Write};
 use std::marker::PhantomData;
 use std::mem::size_of;
-use std::ptr::addr_of;
-use std::{mem, slice};
+use std::ptr::{addr_of, addr_of_mut};
+use std::{cmp, mem, slice};
 
 mod definitions;
 
@@ -86,7 +88,7 @@ impl<'a> PE<'a, Base> {
                 is_mapped: false,
                 phantom_data: PhantomData,
             };
-            pe.set_is_mapped();
+            pe.is_mapped = pe.check_mapped();
 
             Ok(pe)
         }
@@ -107,22 +109,37 @@ impl<'a> PE<'a, Base> {
                 is_mapped: false,
                 phantom_data: PhantomData,
             };
-            pe.set_is_mapped();
+            pe.is_mapped = pe.check_mapped();
 
             pe
         }
     }
-    fn set_is_mapped(&mut self) {
+    fn check_mapped(&self) -> bool {
         unsafe {
-            let first_section: &IMAGE_SECTION_HEADER = mem::transmute(
-                (self.base_address
-                    + self.dos_header().e_lfanew as usize
-                    + self.nt_headers().size_of()),
-            );
-            let section_on_disk = self.base_address + first_section.PointerToRawData as usize;
-            let ptr_to_zero = section_on_disk as *const usize;
+            let data_dir = self.nt_headers().optional_header().data_directory();
+            let import_data_dir = &data_dir[IMAGE_DIRECTORY_ENTRY_IMPORT as usize];
+            let import_table_addr = self.base_address()
+                + self.rva_to_foa(import_data_dir.VirtualAddress).unwrap() as usize;
+            let length = import_data_dir.Size as usize / size_of::<IMAGE_IMPORT_DESCRIPTOR>();
 
-            self.is_mapped = *ptr_to_zero == 0
+            let import_descriptor_table = std::slice::from_raw_parts(
+                import_table_addr as *const IMAGE_IMPORT_DESCRIPTOR,
+                length - 1,
+            );
+
+            for import_descriptor in import_descriptor_table {
+                let string_foa = self.rva_to_foa(import_descriptor.Name).unwrap_or_default();
+                let string_addr = self.base_address() + string_foa as usize;
+                let disk_slice = std::slice::from_raw_parts(
+                    string_addr as *const u8,
+                    strlen(string_addr as *const u8),
+                );
+                if !disk_slice.is_ascii() {
+                    return true;
+                }
+            }
+
+            false
         }
     }
     #[inline(always)]
@@ -146,18 +163,38 @@ impl<'a> PE<'a, Base> {
         }
     }
     #[inline(always)]
-    pub fn image_section_headers(&self) -> &'a [IMAGE_SECTION_HEADER] {
-        let section_headers_pointer = self.nt_headers().address() + self.nt_headers().size_of();
+    pub fn section_headers(&self) -> &'a [IMAGE_SECTION_HEADER] {
+        let section_headers_base = self.nt_headers().address() + self.nt_headers().size_of();
         unsafe {
             std::slice::from_raw_parts(
-                section_headers_pointer as *const IMAGE_SECTION_HEADER,
-                self.nt_headers().file_header().NumberOfSections as usize,
+                section_headers_base as *mut IMAGE_SECTION_HEADER,
+                cmp::min(
+                    self.nt_headers()
+                        .optional_header()
+                        .number_of_rva_and_sizes(),
+                    MAX_SECTION_HEADER_LEN,
+                ) as usize,
+            )
+        }
+    }
+    #[inline(always)]
+    pub fn section_headers_mut(&self) -> &'a [IMAGE_SECTION_HEADER] {
+        let section_headers_base = self.nt_headers().address() + self.nt_headers().size_of();
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                section_headers_base as *mut IMAGE_SECTION_HEADER,
+                cmp::min(
+                    self.nt_headers()
+                        .optional_header()
+                        .number_of_rva_and_sizes(),
+                    MAX_SECTION_HEADER_LEN,
+                ) as usize,
             )
         }
     }
     pub fn rva_to_foa(&self, rva: u32) -> Option<u32> {
         unsafe {
-            let section_headers = self.image_section_headers();
+            let section_headers = self.section_headers();
 
             if rva < section_headers[0].PointerToRawData {
                 return Some(rva);
@@ -202,6 +239,141 @@ impl<'a> PE<'a, Base> {
                 resource_data_entry.DataSize as usize,
             ))
         }
+    }
+    pub unsafe fn get_export_rva_xor_string(&self, xor_name: &[u8], key: &[u8]) -> Option<u32> {
+        let data_dir = self.nt_headers().optional_header().data_directory();
+        let export_data_dir = &data_dir[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+        let mut export_directory_offset = export_data_dir.VirtualAddress;
+        if !self.is_mapped() {
+            export_directory_offset = self.rva_to_foa(export_directory_offset)?;
+        }
+
+        let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
+            mem::transmute(self.base_address() + export_directory_offset as usize);
+
+        let mut eat_offset = export_directory.AddressOfFunctions;
+        if !self.is_mapped() {
+            eat_offset = self.rva_to_foa(eat_offset)?;
+        }
+        let eat_array = std::slice::from_raw_parts(
+            (self.base_address() + eat_offset as usize) as *const u32,
+            export_directory.NumberOfFunctions as usize,
+        );
+
+        // We are only loading by name for this function, so remove the ordinal code.
+        // checking for ordinal can cause issues, here.
+        let mut rva = 0;
+        let mut name_table_offset = export_directory.AddressOfNames;
+        if !self.is_mapped {
+            name_table_offset = self.rva_to_foa(name_table_offset)?;
+        }
+
+        let function_name_table_array = std::slice::from_raw_parts(
+            (self.base_address() + name_table_offset as usize) as *const u32,
+            export_directory.NumberOfNames as usize,
+        );
+
+        for i in 0..export_directory.NumberOfNames as usize {
+            let mut string_offset = function_name_table_array[i];
+            if !self.is_mapped {
+                string_offset = self.rva_to_foa(string_offset)?;
+            }
+
+            let string_address = self.base_address() + string_offset as usize;
+            let name = std::slice::from_raw_parts(
+                string_address as *const u8,
+                strlen(string_address as *const u8),
+            );
+
+            if compare_xor_str_and_str_bytes(xor_name, name, key) {
+                let mut hints_table_offset = export_directory.AddressOfNameOrdinals;
+                if !self.is_mapped {
+                    hints_table_offset = self.rva_to_foa(hints_table_offset)?;
+                }
+
+                let hints_table_array = std::slice::from_raw_parts(
+                    (self.base_address() + hints_table_offset as usize) as *const u16,
+                    export_directory.NumberOfNames as usize,
+                );
+
+                return Some(eat_array[hints_table_array[i] as usize]);
+            }
+        }
+
+        None
+    }
+    pub unsafe fn get_export_rva(&self, export_name: &[u8]) -> Option<u32> {
+        let data_dir = self.nt_headers().optional_header().data_directory();
+        let export_data_dir = &data_dir[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+        let mut export_directory_offset = export_data_dir.VirtualAddress;
+        if !self.is_mapped() {
+            export_directory_offset = self.rva_to_foa(export_directory_offset)?;
+        }
+
+        let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
+            mem::transmute(self.base_address() + export_directory_offset as usize);
+
+        let mut eat_offset = export_directory.AddressOfFunctions;
+        if !self.is_mapped() {
+            eat_offset = self.rva_to_foa(eat_offset)?;
+        }
+        let eat_array = std::slice::from_raw_parts(
+            (self.base_address() + eat_offset as usize) as *const u32,
+            export_directory.NumberOfFunctions as usize,
+        );
+
+        // We are only loading by name for this function, so remove the ordinal code.
+        // checking for ordinal can cause issues, here.
+        let mut rva = 0;
+        let ordinal_test = *(export_name.as_ptr() as *const u32);
+        if ordinal_test >> 16 == 0 {
+            let ordinal = (*(export_name.as_ptr() as *const u16)) as u32;
+            let base = export_directory.Base;
+
+            if (ordinal < base) || (ordinal >= base + export_directory.NumberOfFunctions) {
+                return None;
+            }
+
+            return Some(eat_array[(ordinal - base) as usize]);
+        } else {
+            let mut name_table_offset = export_directory.AddressOfNames;
+            if !self.is_mapped {
+                name_table_offset = self.rva_to_foa(name_table_offset)?;
+            }
+
+            let function_name_table_array = std::slice::from_raw_parts(
+                (self.base_address() + name_table_offset as usize) as *const u32,
+                export_directory.NumberOfNames as usize,
+            );
+
+            for i in 0..export_directory.NumberOfNames as usize {
+                let mut string_offset = function_name_table_array[i];
+                if !self.is_mapped {
+                    string_offset = self.rva_to_foa(string_offset)?;
+                }
+
+                let string_address = self.base_address() + string_offset as usize;
+                let name = std::slice::from_raw_parts(
+                    string_address as *const u8,
+                    strlen(string_address as *const u8),
+                );
+
+                if compare_strs_as_bytes(export_name, name, true) {
+                    let mut hints_table_offset = export_directory.AddressOfNameOrdinals;
+                    if !self.is_mapped {
+                        hints_table_offset = self.rva_to_foa(hints_table_offset)?;
+                    }
+
+                    let hints_table_array = std::slice::from_raw_parts(
+                        (self.base_address() + hints_table_offset as usize) as *const u16,
+                        export_directory.NumberOfNames as usize,
+                    );
+
+                    return Some(eat_array[hints_table_array[i] as usize]);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -559,26 +731,47 @@ unsafe fn get_entry_offset_by_name(
 
 #[cfg(test)]
 mod tests {
+    use crate::consts::LOADLIBRARYA_KEY;
     use crate::util::strlen;
-    use crate::windows::kernel32::{GetModuleHandleA, GetSystemDirectoryA, MAX_PATH};
+    use crate::windows::kernel32::{
+        FnLoadLibraryA, GetModuleHandleA, GetModuleHandleInternal, GetProcAddress,
+        GetProcAddressInternal, GetSystemDirectoryA, LoadLibraryA, VirtualProtect, VirtualQuery,
+        MAX_PATH, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READWRITE,
+    };
+    use crate::windows::ntdll::{
+        IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_DIRECTORY_ENTRY_IMPORT, IMAGE_DOS_HEADER,
+        IMAGE_DOS_SIGNATURE, IMAGE_EXPORT_DIRECTORY, IMAGE_IMPORT_DESCRIPTOR, IMAGE_NT_HEADERS,
+        IMAGE_NT_SIGNATURE,
+    };
     use crate::windows::pe::PE;
-    use std::fs;
+    use std::mem::size_of;
+    use std::ptr::{addr_of, addr_of_mut};
+    use std::{fs, mem};
+
+    fn get_system_dir() -> String {
+        unsafe {
+            let mut buffer = [0; MAX_PATH + 1];
+            GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
+            String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap()
+        }
+    }
 
     #[test]
     fn pe_from_memory_address() {
         unsafe {
             let addr = GetModuleHandleA(0 as *const u8);
             let pe = PE::from_address(addr).unwrap();
-            assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
+            #[cfg(any(target_arch = "x86_64"))]
+            assert_eq!(pe.nt_headers().file_header().Machine, 0x8664);
+            #[cfg(any(target_arch = "x86"))]
+            assert_eq!(pe.nt_headers().file_header().Machine, 0x014C);
         }
     }
 
     #[test]
     fn pe_from_file_32() {
         unsafe {
-            let mut buffer = [0; MAX_PATH + 1];
-            GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
-            let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
+            let path = get_system_dir();
             let file = fs::read(format!("{path}\\..\\SysWOW64\\notepad.exe")).unwrap();
             let pe = PE::from_slice(file.as_slice()).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x014C)
@@ -588,22 +781,137 @@ mod tests {
     #[test]
     fn pe_from_file_64() {
         unsafe {
-            let mut buffer = [0; MAX_PATH + 1];
-            GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
-            let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
+            let path = get_system_dir();
+            #[cfg(any(target_arch = "x86_64"))]
             let file = fs::read(format!("{path}\\notepad.exe")).unwrap();
+            #[cfg(any(target_arch = "x86"))]
+            let file = fs::read(format!("{path}\\..\\Sysnative\\notepad.exe")).unwrap();
             let pe = PE::from_slice(file.as_slice()).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
         }
     }
 
+    fn get_function_ordinal(dll_name: &[u8], function_name: &[u8]) -> u16 {
+        unsafe {
+            let base_addr = GetModuleHandleA(dll_name.as_ptr());
+            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
+            let nt_headers: &IMAGE_NT_HEADERS =
+                mem::transmute(base_addr + dos_header.e_lfanew as usize);
+            let export_dir =
+                &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+
+            let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
+                mem::transmute(base_addr + export_dir.VirtualAddress as usize);
+
+            let name_dir = std::slice::from_raw_parts(
+                (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
+                image_export_directory.NumberOfNames as usize,
+            );
+            let ordinal_dir = std::slice::from_raw_parts(
+                (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
+                image_export_directory.NumberOfNames as usize,
+            );
+
+            for i in 0..name_dir.len() {
+                let name = std::slice::from_raw_parts(
+                    (base_addr + name_dir[i] as usize) as *const u8,
+                    strlen((base_addr + name_dir[i] as usize) as *const u8),
+                );
+
+                if name == function_name {
+                    return ordinal_dir[i] + image_export_directory.Base as u16;
+                }
+            }
+        }
+
+        0u16
+    }
+
+    #[test]
+    fn get_rva_by_ordinal() {
+        unsafe {
+            let ordinal =
+                get_function_ordinal("KERNEL32.DLL\0".as_bytes(), "LoadLibraryA".as_bytes()) as u32;
+            let kernel_32_addr = GetModuleHandleA("kernel32.dll\0".as_ptr());
+
+            let load_library_a_address_ordinal_offset = PE::from_address(kernel_32_addr)
+                .unwrap()
+                .get_export_rva(ordinal.to_le_bytes().as_slice())
+                .unwrap();
+
+            let load_library_a_address = GetProcAddress(kernel_32_addr, "LoadLibraryA\0".as_ptr());
+            assert_eq!(
+                load_library_a_address_ordinal_offset as usize,
+                load_library_a_address - kernel_32_addr
+            );
+        }
+    }
+
+    #[test]
+    fn get_rva() {
+        unsafe {
+            let kernel_32_addr = GetModuleHandleA("kernel32.dll\0".as_ptr());
+            let load_library_a_address_offset = PE::from_address(kernel_32_addr)
+                .unwrap()
+                .get_export_rva("LoadLibraryA".as_bytes())
+                .unwrap();
+
+            let load_library_a_address = GetProcAddress(kernel_32_addr, "LoadLibraryA\0".as_ptr());
+            assert_eq!(
+                load_library_a_address_offset as usize,
+                load_library_a_address - kernel_32_addr
+            );
+        }
+    }
+
+    #[test]
+    fn get_rva_by_ordinal_on_disk() {
+        unsafe {
+            let ordinal =
+                get_function_ordinal("KERNEL32.DLL\0".as_bytes(), "LoadLibraryA".as_bytes()) as u32;
+
+            let path = get_system_dir();
+            let kernel32_file = fs::read(format!("{path}/kernel32.dll")).unwrap();
+            let load_library_a_address_ordinal_offset = PE::from_slice(kernel32_file.as_slice())
+                .unwrap()
+                .get_export_rva(ordinal.to_le_bytes().as_slice())
+                .unwrap();
+
+            let kernel_32_addr = GetModuleHandleA("KERNEL32.DLL\0".as_ptr());
+            let load_library_a_address = GetProcAddress(kernel_32_addr, "LoadLibraryA\0".as_ptr());
+            assert_eq!(
+                load_library_a_address_ordinal_offset as usize,
+                load_library_a_address - kernel_32_addr
+            );
+        }
+    }
+
+    #[test]
+    fn get_rva_on_disk() {
+        unsafe {
+            let path = get_system_dir();
+            let kernel32_file = fs::read(format!("{path}/kernel32.dll")).unwrap();
+            let load_library_a_address_offset = PE::from_slice(kernel32_file.as_slice())
+                .unwrap()
+                .get_export_rva("LoadLibraryA".as_bytes())
+                .unwrap();
+
+            let kernel_32_addr = GetModuleHandleA("KERNEL32.DLL\0".as_ptr());
+            let load_library_a_address = GetProcAddress(kernel_32_addr, "LoadLibraryA\0".as_ptr());
+            assert_eq!(
+                load_library_a_address_offset as usize,
+                load_library_a_address - kernel_32_addr
+            );
+        }
+    }
+
     // This test should not compile.
     //     |
-    // 617 |                 pe = PE::from_slice(file.as_slice()).unwrap();
+    // 910 |                 pe = PE::from_slice(file.as_slice()).unwrap();
     //     |                                     ^^^^^^^^^^^^^^^ borrowed value does not live long enough
-    // 618 |             }
+    // 911 |             }
     //     |             - `file` dropped here while still borrowed
-    // 619 |             assert_ne!(pe.nt_headers().file_header().Machine, 0x8664)
+    // 912 |             assert_ne!(pe.nt_headers().file_header().Machine, 0x8664)
     //     |                        --------------- borrow later used here
     // #[test]
     // fn pe_from_file_lifetime_fail() {
