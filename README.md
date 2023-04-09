@@ -44,7 +44,9 @@ a null terminated string. There are also `util::compare_xor_str_and_str_bytes` a
 which are there to aid in comparing the xor'd strings with non xor'd strings. You can get a slice from any pointer to a 
 C string and the `util::strlen` function, which you can pass in to compare with these two functions, as well as the key 
 to the xor string. This will not decrypt the string, but rather xor encrypt the target string in place, byte by byte, and 
-compare to the xor'd string in the embedded PE resource.  
+compare to the xor'd string in the embedded PE resource. The const values to retrieve your strings from the PE resource have  
+the following values replaced by an underscore: `[" ", ",", ".", "\0"]` with the final value being a null terminator. These 
+can be added to in the `build_src::build_util::make_const_name` function.
 
 ### SVec  
 A vector type, mainly based on Vec\<T\> code that can be used in an unmapped PE, by utilizing the internal `GetModuleHandle` 

@@ -314,7 +314,7 @@ pub(crate) fn generate_random_bytes_in_range_inclusive(
 }
 
 pub(crate) fn make_const_name(string: &str) -> String {
-    let replace = [" ", ",", "."];
+    let replace = [" ", ",", ".", "\0"];
 
     let mut const_name = string.to_uppercase();
 
