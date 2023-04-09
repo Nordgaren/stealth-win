@@ -16,7 +16,6 @@ fn main() {
 
     match env::var("NO_BUILD_STEALTH") {
         Ok(_) => {
-            panic!();
             return;
         }
         _ => {}

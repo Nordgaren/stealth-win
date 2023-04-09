@@ -9,7 +9,6 @@ use crate::util::{
     compare_str_and_w_str_bytes, compare_strs_as_bytes, compare_xor_str_and_str_bytes,
     compare_xor_str_and_w_str_bytes, find_char, get_resource_bytes, strlen,
 };
-#[cfg(test)]
 use crate::windows::ntdll::*;
 use std::ffi::{c_char, CStr, CString};
 use std::mem;
