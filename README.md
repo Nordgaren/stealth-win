@@ -12,11 +12,9 @@ put it next to your project, in whatever folder you have it in, and import it li
 stealth-win = {path="../stealth-win"}  
 ```
 
-You can then edit the config and embed any strings you would like into the PE resource, or change the padding size, etc.   
-The build config is protected by `git update-index --skipworktree`, so your changes won't show up to that file!  If you 
-need to add something to the config while contributing, you can use 
-`git update-index --no-skipworktree ./build_src/build_config.rs` to remove this flag. Just make sure to put it back when 
-you are done!
+You can then edit the config and embed any strings you would like into the PE resource, or change the padding size, etc.
+The build_config file is protected by a git feature that ignores changes to a file, so you can still contribute definitions,
+and change the config file!
 
 #### Environment Variables
 STEALTH_NO_BUILD_SCRIPT  
@@ -26,7 +24,7 @@ have an IDE that wil run cargo check every time you save a file, as to not build
 how to do this easily for VSCode Rust Analyzer crate.
 
 Go to extensions -> Rust Analyzer ⚙ -> Extension Settings -> Search: `@ext:rust-lang.rust-analyzer check` ->
-Rust-analyzer > Check:Extra Env -> Edit in settings.json and add this to the json file.
+"Rust-analyzer > Check:Extra Env" -> Edit in settings.json and add this to the json file.
 ```json
 "rust-analyzer.check.extraEnv": {
 "STEALTH_NO_BUILD_SCRIPT" : "true"
@@ -37,20 +35,25 @@ Rust-analyzer > Check:Extra Env -> Edit in settings.json and add this to the jso
 If you would like to add new definitions to the dll modules, just keep the function type and wrapper function definitions 
 in alphabetical order. I will work on making the struct definitions also alphabetical order.  
 
-If you have ned features you'd like to add, just make sure to follow the goals at the bottom of the page. Mainly the implementation
+If you have features you'd like to add, just make sure to follow the goals at the bottom of the page. Mainly the implementation
 of features that work in both a mapped and unmapped (like a reflective loader dll) state.
+
+The build config is protected by `git update-index --skipworktree`, so your changes won't show up to that file!  If you
+need to add something to the config while contributing, you can use
+`git update-index --no-skipworktree ./build_src/build_config.rs` to remove this flag. Just make sure to put it back when
+you are done updating the config file!
 
 # Features  
 ### PE Reader  
 This is a class that will allow you to read a PE, regardless of if it is 32 bit or 64 bit. It is abstracted away with the use of
 if statements and TypeState abstraction. In it's current implementation, there is a possibility the compiler eventually uses
 memcpy (This was an issue with my first implementation, too). memcpy will cause this to not work in an unmapped PE, which is 
-bad, because the Win API functions use it to get the resource from the consuming executable.  
+bad, because the crate Win API functions use it to get the resource from the consuming executable.  
 
 ### Resource File  
 Resource file built with the build script every time build is ran. Randomizes the position of strings and payload, as well as
 padding between entries. This resource is put into your final EXE and can be indexed using `util::get_resource_bytes` with
-a resource_id, positon, and length.  
+a `resource_id`, `positon`, and `length`.  
 
 ### Embedded Strings  
 Strings can be added to the binary in xor'd format with their own key, from the `build_config.rs`  
@@ -61,14 +64,14 @@ which are there to aid in comparing the xor'd strings with non xor'd strings. Yo
 C string and the `util::strlen` function, which you can pass in to compare with these two functions, as well as the key 
 to the xor string. This will not decrypt the string, but rather xor encrypt the target string in place, byte by byte, and 
 compare to the xor'd string in the embedded PE resource. The const values to retrieve your strings from the PE resource have  
-the following values replaced by an underscore: `[" ", ",", ".", "\0"]` with the final value being a null terminator. These 
+the following values replaced by an underscore: `" " "," "." "\0"`. These 
 can be added to in the `build_src::build_util::make_const_name` function.
 
 ### SVec  
 A vector type, mainly based on Vec\<T\> code that can be used in an unmapped PE, by utilizing the internal `GetModuleHandle` 
 and `GetProcAddress` to call `VirtualAlloc` and `VirtualFree` to manage a buffer of whatever type you give it.  This does not
-require that the PE you are running your code from is mapped into memory properly, or not. It just matters that `kernel32` and
-`ntdll` are mapped into memory, which they should be.  
+require that the PE you are running your code from is mapped into memory properly. It just matters that `kernel32` and
+`ntdll` are mapped into memory in the process the code (unmapped dll) is running in, which it should be.  
 
 ### Win API  
 Windows API calls and structures, and wrappers to get and call these functions through internal `GetModuleHandleX` and 

@@ -475,7 +475,7 @@ pub unsafe fn GetModuleHandleInternal(sModuleName: &[u8]) -> usize {
         let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
         let wsName = std::slice::from_raw_parts(
             pEntry.BaseDllName.Buffer,
-            (pEntry.BaseDllName.Length / 2) as usize,
+            pEntry.BaseDllName.Length as usize / 2,
         );
 
         if compare_str_and_w_str_bytes(sModuleName, wsName, true) {
