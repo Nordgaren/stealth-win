@@ -4,17 +4,10 @@ use crate::build_src::resource_gen::ResourceGenerator;
 use std::env;
 
 fn main() {
-    // Don't run this if CARGO_CHECK is set in the environment variables.
+    // Don't run this if STEALTH_NO_BUILD_SCRIPT is set in the environment variables.
     // Helps anyone who runs Cargo Check on the fly with their editor that can also
     // set environment variables.
-    match env::var("CARGO_CHECK") {
-        Ok(_) => {
-            return;
-        }
-        _ => {}
-    }
-
-    match env::var("NO_BUILD_STEALTH") {
+    match env::var("STEALTH_NO_BUILD_SCRIPT") {
         Ok(_) => {
             return;
         }

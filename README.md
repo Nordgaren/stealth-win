@@ -17,12 +17,26 @@ need to add something to the config while contributing, you can use
 `git update-index --no-skipworktree ./build_src/build_config.rs` to remove this flag. Just make sure to put it back when 
 you are done!
 
+## Environment Variables
+### NO_BUILD_SCRIPT_ST
+You can set `STEALTH_NO_BUILD_SCRIPT` to anything and it will cancel the build script when cargo check is run. This is useful when you
+have an IDE that wil run cargo check every time you save a file, as to not build a whole new PE every time you save. I only know
+how to do this easily for VSCode Rust Analyzer crate.
+
+Go to extensions -> Rust Analyzer ⚙ -> Extension Settings -> Search: `@ext:rust-lang.rust-analyzer check` ->
+Rust-analyzer > Check:Extra Env -> Edit in settings.json and add this to the json file.
+```json
+"rust-analyzer.check.extraEnv": {
+"STEALTH_NO_BUILD_SCRIPT" : "true"
+}
+```
+
 # Contributing  
 If you would like to add new definitions to the dll modules, just keep the function type and wrapper function definitions 
 in alphabetical order. I will work on making the struct definitions also alphabetical order.  
 
 If you have ned features you'd like to add, just make sure to follow the goals at the bottom of the page. Mainly the implementation
-of features that work in both a mapped and unmapped (like a reflective loader dll) state.  
+of features that work in both a mapped and unmapped (like a reflective loader dll) state.
 
 # Features  
 ### PE Reader  
