@@ -459,187 +459,194 @@ pub struct ACL {
     pub Sbz2: u16,
 }
 
-pub unsafe fn GetModuleHandleInternal(sModuleName: &[u8]) -> usize {
+pub unsafe fn GetModuleHandleInternal(module_name: &[u8]) -> usize {
     let peb = get_peb();
 
-    if sModuleName.is_empty() {
-        return peb.ImageBaseAddress;
-    }
-
-    let Ldr = peb.Ldr;
-    let pModuleList = &Ldr.InMemoryOrderModuleList;
-    let pStartListEntry = pModuleList.Flink;
-
-    let mut pListEntry = pStartListEntry;
-    while addr_of!(*pListEntry) as usize != addr_of!(*pModuleList) as usize {
-        let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
-        let wsName = std::slice::from_raw_parts(
-            pEntry.BaseDllName.Buffer,
-            pEntry.BaseDllName.Length as usize / 2,
-        );
-
-        if compare_str_and_w_str_bytes(sModuleName, wsName, true) {
-            return pEntry.DllBase;
-        }
-        pListEntry = pListEntry.Flink;
-    }
-
-    0
-}
-
-pub unsafe fn GetModuleHandleX(sXorName: &[u8], sKey: &[u8]) -> usize {
-    let peb = get_peb();
-
-    if sXorName.is_empty() {
+    if module_name.is_empty() {
         return peb.ImageBaseAddress;
     }
 
     let ldr = peb.Ldr;
-    let pModuleList = &ldr.InMemoryOrderModuleList;
-    let pStartListEntry = pModuleList.Flink;
+    let module_list = &ldr.InMemoryOrderModuleList;
 
-    let mut pListEntry = pStartListEntry;
-    while addr_of!(*pListEntry) as usize != addr_of!(*pModuleList) as usize {
-        let pEntry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(pListEntry);
-
-        let wsName = std::slice::from_raw_parts(
-            pEntry.BaseDllName.Buffer,
-            (pEntry.BaseDllName.Length / 2) as usize,
+    let mut list_entry = module_list.Flink;
+    while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
+        let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
+        let name = std::slice::from_raw_parts(
+            entry.BaseDllName.Buffer,
+            entry.BaseDllName.Length as usize / 2,
         );
-        if compare_xor_str_and_w_str_bytes(sXorName, wsName, sKey) {
-            return pEntry.DllBase;
+
+        if compare_str_and_w_str_bytes(module_name, name, true) {
+            return entry.DllBase;
         }
-        pListEntry = pListEntry.Flink;
+        list_entry = list_entry.Flink;
     }
 
     0
 }
 
-pub unsafe fn GetProcAddressInternal(pBaseAddr: usize, sProcName: &[u8]) -> usize {
-    let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
-    let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
-    let pOptionalHdr = &pNTHdr.OptionalHeader;
-    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-    let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY =
-        mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
+pub unsafe fn GetModuleHandleX(xor_string: &[u8], key: &[u8]) -> usize {
+    let peb = get_peb();
 
-    let pEAT = pBaseAddr + pExportDirAddr.AddressOfFunctions as usize;
-    let sEATArray = std::slice::from_raw_parts(
-        pEAT as *const u32,
-        pExportDirAddr.NumberOfFunctions as usize,
+    if xor_string.is_empty() {
+        return peb.ImageBaseAddress;
+    }
+
+    let ldr = peb.Ldr;
+    let module_list = &ldr.InMemoryOrderModuleList;
+
+    let mut list_entry = module_list.Flink;
+    while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
+        let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
+
+        let name = std::slice::from_raw_parts(
+            entry.BaseDllName.Buffer,
+            entry.BaseDllName.Length as usize / 2,
+        );
+        if compare_xor_str_and_w_str_bytes(xor_string, name, key) {
+            return entry.DllBase;
+        }
+        list_entry = list_entry.Flink;
+    }
+
+    0
+}
+
+pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> usize {
+    let dos_header: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
+    let nt_headers: &'static IMAGE_NT_HEADERS =
+        mem::transmute(base_address + dos_header.e_lfanew as usize);
+    let optional_header = &nt_headers.OptionalHeader;
+    let export_data_directory =
+        &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+    let export_directory_address: &'static IMAGE_EXPORT_DIRECTORY =
+        mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
+
+    let eat_address = base_address + export_directory_address.AddressOfFunctions as usize;
+    let eat_array = std::slice::from_raw_parts(
+        eat_address as *const u32,
+        export_directory_address.NumberOfFunctions as usize,
     );
 
-    let mut pProcAddr = 0;
-    let dwOrdinalTest = *(sProcName.as_ptr() as *const u32);
-    if dwOrdinalTest >> 16 == 0 {
-        let ordinal = (*(sProcName.as_ptr() as *const u16)) as u32;
-        let base = pExportDirAddr.Base;
+    let mut proc_address = 0;
+    if proc_name.len() >= 4 && *(proc_name.as_ptr() as *const u32) >> 16 == 0 {
+        let ordinal = *(proc_name.as_ptr() as *const u32);
+        let base = export_directory_address.Base;
 
-        if (ordinal < base) || (ordinal >= base + pExportDirAddr.NumberOfFunctions) {
+        if (ordinal < base) || (ordinal >= base + export_directory_address.NumberOfFunctions) {
             return 0;
         }
 
-        pProcAddr = pBaseAddr + sEATArray[(ordinal - base) as usize] as usize;
+        proc_address = base_address + eat_array[(ordinal - base) as usize] as usize;
     } else {
-        let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
-        let sFuncNameTblArray = std::slice::from_raw_parts(
-            pFuncNameTbl as *const u32,
-            pExportDirAddr.NumberOfNames as usize,
+        let name_table_address = base_address + export_directory_address.AddressOfNames as usize;
+        let name_table = std::slice::from_raw_parts(
+            name_table_address as *const u32,
+            export_directory_address.NumberOfNames as usize,
         );
 
-        for i in 0..pExportDirAddr.NumberOfNames as usize {
-            let pString = pBaseAddr + sFuncNameTblArray[i] as usize;
-            let sName =
-                std::slice::from_raw_parts(pString as *const u8, strlen(pString as *const u8));
+        for i in 0..export_directory_address.NumberOfNames as usize {
+            let string_address = base_address + name_table[i] as usize;
+            let name = std::slice::from_raw_parts(
+                string_address as *const u8,
+                strlen(string_address as *const u8),
+            );
 
-            if compare_strs_as_bytes(sProcName, sName, true) {
-                let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
-                let sHintsTblArray = std::slice::from_raw_parts(
-                    pHintsTbl as *const u16,
-                    pExportDirAddr.NumberOfNames as usize,
+            if compare_strs_as_bytes(proc_name, name, true) {
+                let hints_table_address =
+                    base_address + export_directory_address.AddressOfNameOrdinals as usize;
+                let hints_table = std::slice::from_raw_parts(
+                    hints_table_address as *const u16,
+                    export_directory_address.NumberOfNames as usize,
                 );
-                pProcAddr = pBaseAddr + sEATArray[sHintsTblArray[i] as usize] as usize;
+                proc_address = base_address + eat_array[hints_table[i] as usize] as usize;
             }
         }
     }
 
-    if pProcAddr >= addr_of!(*pExportDirAddr) as usize
-        && pProcAddr < addr_of!(*pExportDirAddr) as usize + pExportDataDir.Size as usize
+    if proc_address >= addr_of!(*export_directory_address) as usize
+        && proc_address
+            < addr_of!(*export_directory_address) as usize + export_data_directory.Size as usize
     {
-        pProcAddr = get_fwd_addr(pProcAddr);
+        proc_address = get_fwd_addr(proc_address);
     }
 
-    pProcAddr
+    proc_address
 }
 
-pub unsafe fn GetProcAddressX(pBaseAddr: usize, sXorName: &[u8], sKey: &[u8]) -> usize {
-    let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(pBaseAddr);
-    let pNTHdr: &'static IMAGE_NT_HEADERS = mem::transmute(pBaseAddr + pDosHdr.e_lfanew as usize);
-    let pOptionalHdr = &pNTHdr.OptionalHeader;
-    let pExportDataDir = &pOptionalHdr.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-    let pExportDirAddr: &'static IMAGE_EXPORT_DIRECTORY =
-        mem::transmute(pBaseAddr + pExportDataDir.VirtualAddress as usize);
+pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]) -> usize {
+    let dos_header: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
+    let nt_headers: &'static IMAGE_NT_HEADERS =
+        mem::transmute(base_address + dos_header.e_lfanew as usize);
+    let optional_header = &nt_headers.OptionalHeader;
+    let export_data_directory =
+        &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+    let export_directory_address: &'static IMAGE_EXPORT_DIRECTORY =
+        mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
-    let pEAT = pBaseAddr + pExportDirAddr.AddressOfFunctions as usize;
-    let sEATArray = std::slice::from_raw_parts(
-        pEAT as *const u32,
-        pExportDirAddr.NumberOfFunctions as usize,
+    let eat_address = base_address + export_directory_address.AddressOfFunctions as usize;
+    let eat_array = std::slice::from_raw_parts(
+        eat_address as *const u32,
+        export_directory_address.NumberOfFunctions as usize,
     );
 
     // We are only loading by name for this function, so remove the ordinal code.
     // checking for ordinal can cause issues, here.
-    let mut pProcAddr = 0;
-    let pFuncNameTbl = pBaseAddr + pExportDirAddr.AddressOfNames as usize;
-    let sFuncNameTblArray = std::slice::from_raw_parts(
-        pFuncNameTbl as *const u32,
-        pExportDirAddr.NumberOfNames as usize,
+    let mut proc_address = 0;
+    let name_table_address = base_address + export_directory_address.AddressOfNames as usize;
+    let name_table = std::slice::from_raw_parts(
+        name_table_address as *const u32,
+        export_directory_address.NumberOfNames as usize,
     );
 
-    for i in 0..pExportDirAddr.NumberOfNames as usize {
-        let pString = (pBaseAddr + sFuncNameTblArray[i] as usize) as *const u8;
-        let sName = std::slice::from_raw_parts(pString, strlen(pString));
+    for i in 0..export_directory_address.NumberOfNames as usize {
+        let string_address = (base_address + name_table[i] as usize) as *const u8;
+        let name = std::slice::from_raw_parts(string_address, strlen(string_address));
 
-        if compare_xor_str_and_str_bytes(sXorName, sName, sKey) {
-            let pHintsTbl = pBaseAddr + pExportDirAddr.AddressOfNameOrdinals as usize;
-            let sHintsTblArray = std::slice::from_raw_parts(
-                pHintsTbl as *const u16,
-                pExportDirAddr.NumberOfNames as usize,
+        if compare_xor_str_and_str_bytes(xor_string, name, key) {
+            let hints_table_address =
+                base_address + export_directory_address.AddressOfNameOrdinals as usize;
+            let hints_table = std::slice::from_raw_parts(
+                hints_table_address as *const u16,
+                export_directory_address.NumberOfNames as usize,
             );
-            pProcAddr = pBaseAddr + sEATArray[sHintsTblArray[i] as usize] as usize;
+            proc_address = base_address + eat_array[hints_table[i] as usize] as usize;
         }
     }
 
-    if pProcAddr >= addr_of!(*pExportDirAddr) as usize
-        && pProcAddr < addr_of!(*pExportDirAddr) as usize + pExportDataDir.Size as usize
+    if proc_address >= addr_of!(*export_directory_address) as usize
+        && proc_address
+            < addr_of!(*export_directory_address) as usize + export_data_directory.Size as usize
     {
-        pProcAddr = get_fwd_addr(pProcAddr);
+        proc_address = get_fwd_addr(proc_address);
     }
 
-    pProcAddr
+    proc_address
 }
 
-unsafe fn get_fwd_addr(pProcAddr: usize) -> usize {
-    let mut sFwdDll =
-        std::slice::from_raw_parts(pProcAddr as *const u8, strlen(pProcAddr as *const u8))
+unsafe fn get_fwd_addr(proc_address: usize) -> usize {
+    let mut forward_dll =
+        std::slice::from_raw_parts(proc_address as *const u8, strlen(proc_address as *const u8))
             .to_svec();
 
-    let szSplitPos = match find_char(&sFwdDll[..], '.' as u8) {
+    let split_pos = match find_char(&forward_dll[..], '.' as u8) {
         None => {
             return 0;
         }
         Some(sz) => sz,
     };
 
-    sFwdDll[szSplitPos] = 0;
+    forward_dll[split_pos] = 0;
 
-    let hFwd = LoadLibraryA(sFwdDll.as_ptr());
-    if hFwd == 0 {
+    let forward_handle = LoadLibraryA(forward_dll.as_ptr());
+    if forward_handle == 0 {
         return 0;
     }
 
-    let pString = (pProcAddr + szSplitPos + 1) as *const u8;
-    let sFwdFunction = std::slice::from_raw_parts(pString, strlen(pString));
-    GetProcAddressInternal(hFwd, sFwdFunction)
+    let string_address = (proc_address + split_pos + 1) as *const u8;
+    let forward_function = std::slice::from_raw_parts(string_address, strlen(string_address));
+    GetProcAddressInternal(forward_handle, forward_function)
 }
 
 pub unsafe fn AllocConsole() -> u32 {
