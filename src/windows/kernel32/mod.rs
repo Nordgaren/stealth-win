@@ -520,34 +520,34 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
     let optional_header = &nt_headers.OptionalHeader;
     let export_data_directory =
         &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-    let export_directory_address: &'static IMAGE_EXPORT_DIRECTORY =
+    let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
         mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
-    let eat_address = base_address + export_directory_address.AddressOfFunctions as usize;
+    let eat_address = base_address + export_directory.AddressOfFunctions as usize;
     let eat_array = std::slice::from_raw_parts(
         eat_address as *const u32,
-        export_directory_address.NumberOfFunctions as usize,
+        export_directory.NumberOfFunctions as usize,
     );
 
     let mut proc_address = 0;
     let ordinal_test = (proc_name.as_ptr() as *const u32);
     if proc_name.len() >= 4 && *ordinal_test >> 16 == 0 {
         let ordinal = *ordinal_test;
-        let base = export_directory_address.Base;
+        let base = export_directory.Base;
 
-        if (ordinal < base) || (ordinal >= base + export_directory_address.NumberOfFunctions) {
+        if (ordinal < base) || (ordinal >= base + export_directory.NumberOfFunctions) {
             return 0;
         }
 
         proc_address = base_address + eat_array[(ordinal - base) as usize] as usize;
     } else {
-        let name_table_address = base_address + export_directory_address.AddressOfNames as usize;
+        let name_table_address = base_address + export_directory.AddressOfNames as usize;
         let name_table = std::slice::from_raw_parts(
             name_table_address as *const u32,
-            export_directory_address.NumberOfNames as usize,
+            export_directory.NumberOfNames as usize,
         );
 
-        for i in 0..export_directory_address.NumberOfNames as usize {
+        for i in 0..export_directory.NumberOfNames as usize {
             let string_address = base_address + name_table[i] as usize;
             let name = std::slice::from_raw_parts(
                 string_address as *const u8,
@@ -556,19 +556,20 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
 
             if compare_strs_as_bytes(proc_name, name, true) {
                 let hints_table_address =
-                    base_address + export_directory_address.AddressOfNameOrdinals as usize;
+                    base_address + export_directory.AddressOfNameOrdinals as usize;
                 let hints_table = std::slice::from_raw_parts(
                     hints_table_address as *const u16,
-                    export_directory_address.NumberOfNames as usize,
+                    export_directory.NumberOfNames as usize,
                 );
+
                 proc_address = base_address + eat_array[hints_table[i] as usize] as usize;
             }
         }
     }
 
-    if proc_address >= addr_of!(*export_directory_address) as usize
+    if proc_address >= addr_of!(*export_directory) as usize
         && proc_address
-            < addr_of!(*export_directory_address) as usize + export_data_directory.Size as usize
+            < addr_of!(*export_directory) as usize + export_data_directory.Size as usize
     {
         proc_address = get_fwd_addr(proc_address);
     }
@@ -583,42 +584,43 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
     let optional_header = &nt_headers.OptionalHeader;
     let export_data_directory =
         &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-    let export_directory_address: &'static IMAGE_EXPORT_DIRECTORY =
+    let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
         mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
-    let eat_address = base_address + export_directory_address.AddressOfFunctions as usize;
+    let eat_address = base_address + export_directory.AddressOfFunctions as usize;
     let eat_array = std::slice::from_raw_parts(
         eat_address as *const u32,
-        export_directory_address.NumberOfFunctions as usize,
+        export_directory.NumberOfFunctions as usize,
     );
 
     // We are only loading by name for this function, so remove the ordinal code.
     // checking for ordinal can cause issues, here.
     let mut proc_address = 0;
-    let name_table_address = base_address + export_directory_address.AddressOfNames as usize;
+    let name_table_address = base_address + export_directory.AddressOfNames as usize;
     let name_table = std::slice::from_raw_parts(
         name_table_address as *const u32,
-        export_directory_address.NumberOfNames as usize,
+        export_directory.NumberOfNames as usize,
     );
 
-    for i in 0..export_directory_address.NumberOfNames as usize {
+    for i in 0..export_directory.NumberOfNames as usize {
         let string_address = (base_address + name_table[i] as usize) as *const u8;
         let name = std::slice::from_raw_parts(string_address, strlen(string_address));
 
         if compare_xor_str_and_str_bytes(xor_string, name, key) {
             let hints_table_address =
-                base_address + export_directory_address.AddressOfNameOrdinals as usize;
+                base_address + export_directory.AddressOfNameOrdinals as usize;
             let hints_table = std::slice::from_raw_parts(
                 hints_table_address as *const u16,
-                export_directory_address.NumberOfNames as usize,
+                export_directory.NumberOfNames as usize,
             );
+
             proc_address = base_address + eat_array[hints_table[i] as usize] as usize;
         }
     }
 
-    if proc_address >= addr_of!(*export_directory_address) as usize
+    if proc_address >= addr_of!(*export_directory) as usize
         && proc_address
-            < addr_of!(*export_directory_address) as usize + export_data_directory.Size as usize
+            < addr_of!(*export_directory) as usize + export_data_directory.Size as usize
     {
         proc_address = get_fwd_addr(proc_address);
     }
