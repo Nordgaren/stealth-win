@@ -88,7 +88,7 @@ way for the user to keep a config file in their project. As it stand, now. you n
 I would like most of this code to be usable in an unmapped state, i.e, if you are trying to use this library in a reflective
 loader. This may end up driving the project to be a `#[no_std]` crate, in the end.  
 ### Add more mechanisms for avoiding detection for various activities    
-This is just the start. The project started while doing Sektor7 courses and needing a way to hide my strings, but I didn't want 
+This is just the start. The project started because I needed a way to hide my strings, but I didn't want 
 to manually encrypt and pack strings into my project.  
 ### Learn more about Windows internals   
 and maybe Linux internals, down the line, too!  

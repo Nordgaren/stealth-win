@@ -322,8 +322,6 @@ impl<'a> PE<'a, Base> {
             export_directory.NumberOfFunctions as usize,
         );
 
-        // We are only loading by name for this function, so remove the ordinal code.
-        // checking for ordinal can cause issues, here.
         let mut rva = 0;
         let ordinal_test = *(export_name.as_ptr() as *const u32);
         if ordinal_test >> 16 == 0 {
