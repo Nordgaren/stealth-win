@@ -530,8 +530,9 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
     );
 
     let mut proc_address = 0;
-    if proc_name.len() >= 4 && *(proc_name.as_ptr() as *const u32) >> 16 == 0 {
-        let ordinal = *(proc_name.as_ptr() as *const u32);
+    let ordinal_test = (proc_name.as_ptr() as *const u32);
+    if proc_name.len() >= 4 && *ordinal_test >> 16 == 0 {
+        let ordinal = *ordinal_test;
         let base = export_directory_address.Base;
 
         if (ordinal < base) || (ordinal >= base + export_directory_address.NumberOfFunctions) {

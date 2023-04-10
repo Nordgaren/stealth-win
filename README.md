@@ -45,10 +45,12 @@ you are done updating the config file!
 
 # Features  
 ### PE Reader  
+###### In Development ######
 This is a class that will allow you to read a PE, regardless of if it is 32 bit or 64 bit. It is abstracted away with the use of
 if statements and TypeState abstraction. In it's current implementation, there is a possibility the compiler eventually uses
 memcpy (This was an issue with my first implementation, too). memcpy will cause this to not work in an unmapped PE, which is 
-bad, because the crate Win API functions use it to get the resource from the consuming executable.  
+bad, because the crate Win API functions use it to get the resource from the consuming executable. For now, though, no such 
+calls have been generated in my dev environment.  
 
 ### Resource File  
 Resource file built with the build script every time build is ran. Randomizes the position of strings and payload, as well as
