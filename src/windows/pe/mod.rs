@@ -399,7 +399,42 @@ impl<'a> PE<'a, Base> {
                     strlen((base_addr + name_dir[i] as usize) as *const u8),
                 );
 
-                if name == function_name {
+                if compare_strs_as_bytes(name, function_name, true) {
+                    return ordinal_dir[i] + image_export_directory.Base as u16;
+                }
+            }
+        }
+
+        0
+    }
+    fn get_function_ordinal_xor(&self, function_name: &[u8], key: &[u8]) -> u16 {
+        unsafe {
+            let base_addr = self.base_address();
+            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
+            let nt_headers: &IMAGE_NT_HEADERS =
+                mem::transmute(base_addr + dos_header.e_lfanew as usize);
+            let export_dir =
+                &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+
+            let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
+                mem::transmute(base_addr + export_dir.VirtualAddress as usize);
+
+            let name_dir = core::slice::from_raw_parts(
+                (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
+                image_export_directory.NumberOfNames as usize,
+            );
+            let ordinal_dir = core::slice::from_raw_parts(
+                (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
+                image_export_directory.NumberOfNames as usize,
+            );
+
+            for i in 0..name_dir.len() {
+                let name = core::slice::from_raw_parts(
+                    (base_addr + name_dir[i] as usize) as *const u8,
+                    strlen((base_addr + name_dir[i] as usize) as *const u8),
+                );
+
+                if compare_xor_str_and_str_bytes(name, function_name, key) {
                     return ordinal_dir[i] + image_export_directory.Base as u16;
                 }
             }
@@ -722,7 +757,7 @@ unsafe fn get_entry_offset_by_id(
     let resource_entries_address = addr_of!(*resource_directory_table) as usize
         + size_of::<RESOURCE_DIRECTORY_TABLE>()
         + (size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>()
-            * resource_directory_table.NumberOfNameEntries as usize);
+        * resource_directory_table.NumberOfNameEntries as usize);
     let resource_directory_entries = core::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
         resource_directory_table.NumberOfIDEntries as usize,
@@ -810,9 +845,9 @@ mod tests {
         unsafe {
             let path = get_system_dir();
             #[cfg(any(target_arch = "x86_64"))]
-            let file = fs::read(format!("{path}\\notepad.exe").as_bytes()).unwrap();
+                let file = fs::read(format!("{path}\\notepad.exe").as_bytes()).unwrap();
             #[cfg(any(target_arch = "x86"))]
-            let file = fs::read(format!("{path}\\..\\Sysnative\\notepad.exe").as_bytes()).unwrap();
+                let file = fs::read(format!("{path}\\..\\Sysnative\\notepad.exe").as_bytes()).unwrap();
             let pe = PE::from_slice(file.as_slice()).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
         }
