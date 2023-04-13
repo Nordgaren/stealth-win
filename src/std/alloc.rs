@@ -1,9 +1,9 @@
 // This is the std library default GlobalAlloc for windows, but with in-lined calls to GetProcessHeap,
 // and removed the Atomic that stores the cached heap address. GetProcessHeap in this crate uses the internal
 // GetProcAddress, which works in both mapped and unmapped memory.
+use crate::windows::kernel32::{GetProcessHeap, HeapAlloc, HeapFree, HeapReAlloc};
 use core::alloc::{GlobalAlloc, Layout};
 use core::{cmp, mem, ptr};
-use crate::windows::kernel32::{GetProcessHeap, HeapAlloc, HeapFree, HeapReAlloc};
 
 // Heap memory management on Windows is done by using the system Heap API (heapapi.h)
 // See https://docs.microsoft.com/windows/win32/api/heapapi/

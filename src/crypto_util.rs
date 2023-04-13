@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 #![allow(unused)]
 
-use core::ptr::addr_of_mut;
 use crate::consts::*;
 use crate::svec::{SVec, ToSVec};
 use crate::util::get_resource_bytes;
 use crate::windows::advapi::*;
+use core::ptr::addr_of_mut;
 
 fn aes_encrypt_bytes(bytes: &[u8], aes_key: &[u8], aes_iv: &[u8]) -> SVec<u8> {
     unsafe {

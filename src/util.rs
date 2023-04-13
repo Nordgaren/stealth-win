@@ -2,7 +2,6 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use alloc::string::String;
 use crate::windows::kernel32::{GetSystemDirectoryA, GetSystemDirectoryW, MAX_PATH, PAGE_SIZE};
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
@@ -10,6 +9,7 @@ use crate::windows::ntdll::{
     RESOURCE_DIRECTORY_TABLE,
 };
 use crate::windows::pe::PE;
+use alloc::string::String;
 use core::arch::global_asm;
 use core::mem;
 use core::mem::size_of;

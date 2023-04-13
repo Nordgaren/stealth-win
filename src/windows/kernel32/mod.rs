@@ -1075,7 +1075,7 @@ pub unsafe fn HeapAlloc(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize {
     heapAlloc(hHeap, dwFlags, dwBytes)
 }
 
-pub unsafe fn HeapFree(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32{
+pub unsafe fn HeapFree(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32 {
     let heapFree: FnHeapFree = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),

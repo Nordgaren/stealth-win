@@ -757,7 +757,7 @@ unsafe fn get_entry_offset_by_id(
     let resource_entries_address = addr_of!(*resource_directory_table) as usize
         + size_of::<RESOURCE_DIRECTORY_TABLE>()
         + (size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>()
-        * resource_directory_table.NumberOfNameEntries as usize);
+            * resource_directory_table.NumberOfNameEntries as usize);
     let resource_directory_entries = core::slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
         resource_directory_table.NumberOfIDEntries as usize,
@@ -845,9 +845,9 @@ mod tests {
         unsafe {
             let path = get_system_dir();
             #[cfg(any(target_arch = "x86_64"))]
-                let file = fs::read(format!("{path}\\notepad.exe").as_bytes()).unwrap();
+            let file = fs::read(format!("{path}\\notepad.exe").as_bytes()).unwrap();
             #[cfg(any(target_arch = "x86"))]
-                let file = fs::read(format!("{path}\\..\\Sysnative\\notepad.exe").as_bytes()).unwrap();
+            let file = fs::read(format!("{path}\\..\\Sysnative\\notepad.exe").as_bytes()).unwrap();
             let pe = PE::from_slice(file.as_slice()).unwrap();
             assert_eq!(pe.nt_headers().file_header().Machine, 0x8664)
         }

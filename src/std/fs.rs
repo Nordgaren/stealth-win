@@ -1,17 +1,23 @@
+use crate::svec::{SVec, ToSVec};
+use crate::util::copy_buffer;
+use crate::windows::kernel32::{
+    CloseHandle, CreateFileA, CreateFileW, GetFileSize, GetLastError, ReadFile,
+    WaitForSingleObject, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ,
+    GENERIC_READ, INFINITE, INVALID_HANDLE_VALUE, MAX_PATH, OPEN_EXISTING, OVERLAPPED,
+    SECURITY_ATTRIBUTES,
+};
+use crate::windows::ntdll::{
+    NtReadFile, IO_STATUS_BLOCK, LARGE_INTEGER, STATUS_END_OF_FILE, STATUS_PENDING,
+};
 use alloc::borrow::Cow::Borrowed;
 use alloc::string::String;
-use crate::windows::kernel32::{CreateFileA, GetFileSize, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, GENERIC_READ, OPEN_EXISTING, SECURITY_ATTRIBUTES, FILE_FLAG_OVERLAPPED, ReadFile, OVERLAPPED, GetLastError, INVALID_HANDLE_VALUE, CreateFileW, CloseHandle, MAX_PATH, WaitForSingleObject, INFINITE};
 use alloc::vec::Vec;
 use core::mem::size_of;
 use core::ptr::addr_of_mut;
 use core::{cmp, ptr, slice};
-use crate::svec::{SVec, ToSVec};
-use crate::util::copy_buffer;
-use crate::windows::ntdll::{IO_STATUS_BLOCK, LARGE_INTEGER, NtReadFile, STATUS_END_OF_FILE, STATUS_PENDING};
 
 pub fn read(path: &[u8]) -> Result<Vec<u8>, u32> {
     unsafe {
-
         let mut file_path = [0; MAX_PATH + 1];
         copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
 
@@ -114,8 +120,7 @@ unsafe fn read_file_from_handle(file_handle: usize) -> Result<Vec<u8>, u32> {
     Ok(file)
 }
 
-
-unsafe fn sread_file_from_handle(file_handle: usize) -> Result<SVec<u8>,  u32> {
+unsafe fn sread_file_from_handle(file_handle: usize) -> Result<SVec<u8>, u32> {
     let mut file_size_high = 0;
     let file_size_low = GetFileSize(file_handle, addr_of_mut!(file_size_high)) as u64;
     let file_size = ((file_size_high as u64) << 32) | file_size_low;
@@ -130,7 +135,6 @@ unsafe fn sread_file_from_handle(file_handle: usize) -> Result<SVec<u8>,  u32> {
 
     Ok(file)
 }
-
 
 unsafe fn read_file_to_end(file_handle: usize, buffer: &mut [u8]) -> i32 {
     let file_size = buffer.len();
@@ -152,7 +156,10 @@ unsafe fn read_file_to_end(file_handle: usize, buffer: &mut [u8]) -> i32 {
 }
 
 unsafe fn read_to_buffer(file_handle: usize, buffer: *mut u8, len: u32, offset: usize) -> i32 {
-    let mut io_status = IO_STATUS_BLOCK { Status: STATUS_PENDING, Information: 0 };
+    let mut io_status = IO_STATUS_BLOCK {
+        Status: STATUS_PENDING,
+        Information: 0,
+    };
     let large_integer = LARGE_INTEGER(offset as u64);
     let status = NtReadFile(
         file_handle,
@@ -190,12 +197,12 @@ unsafe fn read_to_buffer(file_handle: usize, buffer: *mut u8, len: u32, offset: 
 
 #[cfg(test)]
 mod tests {
-    use alloc::format;
-    use core::ffi::CStr;
+    use super::*;
     use crate::std::alloc::NoImportAllocator;
     use crate::std::fs;
     use crate::util::get_system_dir;
-    use super::*;
+    use alloc::format;
+    use core::ffi::CStr;
 
     #[test]
     fn read_file() {
@@ -223,7 +230,12 @@ mod tests {
         let file = fs::read(format!("C:\\Users\\malware\\Downloads\\10GB.bin").as_bytes()).unwrap();
 
         assert_eq!(file[..2], [0x71, 0x4B]);
-        assert_eq!(file[file.len() - 0x10..], [0xE2, 0x50, 0x3E, 0x3A, 0x24, 0x02, 0x13, 0x0B, 0xF6, 0xB3, 0x85, 0xB9, 0xAD, 0x2D, 0x4C, 0x51]);
+        assert_eq!(
+            file[file.len() - 0x10..],
+            [
+                0xE2, 0x50, 0x3E, 0x3A, 0x24, 0x02, 0x13, 0x0B, 0xF6, 0xB3, 0x85, 0xB9, 0xAD, 0x2D,
+                0x4C, 0x51
+            ]
+        );
     }
-
 }
