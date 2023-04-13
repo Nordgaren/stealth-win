@@ -3,6 +3,7 @@ mod build_src;
 use crate::build_src::resource_gen::ResourceGenerator;
 use std::env;
 
+
 fn main() {
     // Don't run this if STEALTH_NO_BUILD_SCRIPT is set in the environment variables.
     // Helps anyone who runs Cargo Check on the fly with their editor that can also

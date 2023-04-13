@@ -1,15 +1,16 @@
+use alloc::vec::Vec;
 use crate::util::copy_buffer;
 use crate::windows::kernel32::{
     VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
 };
 use crate::windows::user32::MessageBoxA;
-use std::alloc::Layout;
-use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
-use std::mem::size_of;
-use std::ops::{Index, IndexMut, RangeFrom};
-use std::ptr::NonNull;
-use std::slice::{Iter, SliceIndex};
-use std::{cmp, fmt, mem, ptr};
+use core::alloc::Layout;
+use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
+use core::mem::size_of;
+use core::ops::{Index, IndexMut, RangeFrom};
+use core::ptr::NonNull;
+use core::slice::{Iter, SliceIndex};
+use core::{cmp, fmt, mem, ptr};
 
 pub struct SVec<T> {
     ptr: NonNull<T>,
@@ -95,8 +96,8 @@ impl<T> SVec<T> {
         self.cap = new_cap;
     }
     pub fn resize(&mut self, new_len: usize, value: T)
-    where
-        T: Clone,
+        where
+            T: Clone,
     {
         let len = self.len();
 
@@ -107,8 +108,8 @@ impl<T> SVec<T> {
         }
     }
     pub fn extend_with(&mut self, n: usize, value: T)
-    where
-        T: Clone,
+        where
+            T: Clone,
     {
         self.grow(self.len + n);
         let old_size = self.len;
@@ -145,11 +146,19 @@ impl<T> SVec<T> {
     }
     #[inline]
     pub fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
+        unsafe { core::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
     #[inline]
     pub fn as_mut_slice(&self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+        unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+    }
+    #[inline]
+    pub fn clear(&mut self) {
+        let elems: *mut [T] = self.as_mut_slice();
+        unsafe {
+            self.len = 0;
+            ptr::drop_in_place(elems);
+        }
     }
     #[inline]
     pub fn len(&self) -> usize {
@@ -166,7 +175,7 @@ impl<T> SVec<T> {
 }
 
 impl<T> FromIterator<T> for SVec<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
         let mut iterator = iter.into_iter();
         let mut svec = SVec::new();
 
@@ -189,19 +198,19 @@ impl<'a, T> IntoIterator for &'a SVec<T> {
 }
 
 impl<T> Display for SVec<T>
-where
-    T: Debug,
+    where
+        T: Debug,
 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:?}", self.as_slice());
         Ok(())
     }
 }
 
 impl<T> UpperHex for SVec<T>
-where
-    T: UpperHex,
-    T: Debug,
+    where
+        T: UpperHex,
+        T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:X?}", self.as_slice());
@@ -210,9 +219,9 @@ where
 }
 
 impl<T> LowerHex for SVec<T>
-where
-    T: LowerHex,
-    T: Debug,
+    where
+        T: LowerHex,
+        T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x?}", self.as_slice());
@@ -240,8 +249,8 @@ pub trait ToSVec<T> {
 }
 
 impl<T> ToSVec<T> for [T]
-where
-    T: Sized,
+    where
+        T: Sized,
 {
     fn to_svec(&self) -> SVec<T> {
         let mut svec = SVec::with_capacity(self.len());
@@ -266,6 +275,9 @@ impl<T> Drop for SVec<T> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::format;
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
     use super::*;
 
     const DUMMY_SLICE: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -384,5 +396,11 @@ mod tests {
         let mut svec: SVec<u8> = (0..=15).collect();
         svec.resize(10, 0);
         assert_eq!(&svec[..], &DUMMY_SLICE[..10])
+    }
+
+    #[test]
+    fn into_vec() {
+        let mut svec: SVec<u8> = (0..=15).collect();
+        let vec: Vec<u8> = (0..=15).collect();
     }
 }

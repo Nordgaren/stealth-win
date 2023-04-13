@@ -113,7 +113,7 @@ pub(crate) fn get_iv_len() -> usize {
             panic!();
         }
 
-        let mut iv: Vec<u8> = vec![0; 420];
+        let mut iv = [0; 420];
         let mut len = iv.len() as u32;
         if CryptGetKeyParam(hKey, KP_IV, iv.as_mut_ptr(), addr_of_mut!(len), 0) == 0 {
             panic!();

@@ -11,7 +11,6 @@ put it next to your project, in whatever folder you have it in, and import it li
 [dependencies]  
 stealth-win = {path="../stealth-win"}  
 ```
-
 You can then edit the config and embed any strings you would like into the PE resource, or change the padding size, etc.
 The build_config file is protected by a git feature that ignores changes to a file, so you can still contribute definitions,
 and change the config file!
@@ -19,12 +18,12 @@ and change the config file!
 #### Environment Variables
 STEALTH_NO_BUILD_SCRIPT  
 
-You can set `STEALTH_NO_BUILD_SCRIPT` to anything and it will cancel the build script when cargo check is run. This is useful when you
+You can set `STEALTH_NO_BUILD_SCRIPT` to anything and it will cancel the build script portion of the crate. This is useful when you
 have an IDE that wil run cargo check every time you save a file, as to not build a whole new PE every time you save. I only know
-how to do this easily for VSCode Rust Analyzer crate.
+how to do this automatically when cargo check is run, for VSCode Rust Analyzer plugin.
 
-Go to extensions -> Rust Analyzer ⚙ -> Extension Settings -> Search: `@ext:rust-lang.rust-analyzer check` ->
-"Rust-analyzer > Check:Extra Env" -> Edit in settings.json and add this to the json file.
+Go to extensions -> `Rust Analyzer ⚙` -> `Extension Settings` -> `Search: "@ext:rust-lang.rust-analyzer check"` ->
+`Rust-analyzer > Check:Extra Env` -> `Edit in settings.json` and add this to the json file.
 ```json
 "rust-analyzer.check.extraEnv": {
 "STEALTH_NO_BUILD_SCRIPT" : "true"
@@ -48,9 +47,10 @@ you are done updating the config file!
 ###### In Development ######
 This is a class that will allow you to read a PE, regardless of if it is 32 bit or 64 bit. It is abstracted away with the use of
 if statements and TypeState abstraction. In it's current implementation, there is a possibility the compiler eventually uses
-memcpy (This was an issue with my first implementation, too). memcpy will cause this to not work in an unmapped PE, which is 
+memcpy (This was an issue with my first implementation, too). `memcpy` will cause this to not work in an unmapped PE, which is 
 bad, because the crate Win API functions use it to get the resource from the consuming executable. For now, though, no such 
-calls have been generated in my dev environment.  
+calls have been generated in my dev environment. I have recently taken the crate to `\[no_std\]`, in the hope that I can 
+avoid all calls to functions like `memcpy`
 
 ### Resource File  
 Resource file built with the build script every time build is ran. Randomizes the position of strings and payload, as well as
@@ -70,11 +70,33 @@ the following values replaced by an underscore: `" " "," "." "\0"`. These
 can be added to in the `build_src::build_util::make_const_name` function.
 
 ### SVec  
-A vector type, mainly based on Vec\<T\> code that can be used in an unmapped PE, by utilizing the internal `GetModuleHandle` 
+A vector type, mainly based on `Vec\<T\>` code that can be used in an unmapped PE, by utilizing the internal `GetModuleHandle` 
 and `GetProcAddress` to call `VirtualAlloc` and `VirtualFree` to manage a buffer of whatever type you give it.  This does not
 require that the PE you are running your code from is mapped into memory properly. It just matters that `kernel32` and
 `ntdll` are mapped into memory in the process the code (unmapped dll) is running in, which it should be.  
 
+## STD
+### Global Allocator
+You can use an import-free version of the windows Global Allocator from this crate byt adding this to your project:
+```rust
+#[global_allocator]
+static GLOBAL: NoImportAllocator = NoImportAllocator;
+```
+This is essentually a copy past of the standard library Global Allocator, but instead of keeping an atomic pointer around to the 
+heap, it just calls `GetProcessHeap` with every allocation. This give you the ability to use the `Vec\<T\>` class, and 
+any class that uses it, instead of the SVec class. Be warned, this global allocator will conflict with any Rust program 
+that consumes you as a crate, if you are one. The `String`class CAN be used, but any static strings in your own binary 
+will not be accessible until your PE is mapped into memory properly. 
+
+For example, if I made that the default allocator for THIS crate, it would effect all consuming crates. This is why I include this
+and the `SVec\<T\>` type.
+
+### File Read/Write
+###### In Development ######
+So far I have reimplemented file reading using `NtReadFile`. It's very similar to the standard library implementation, but for
+some reason it's half as fast. This could use some improvement, and file write would also be a good addition.  
+
+## Windows
 ### Win API  
 Windows API calls and structures, and wrappers to get and call these functions through internal `GetModuleHandleX` and 
 `GetProcAddresX`, both of which use the internal xor string comparison algorithm to find the function call.  
@@ -88,7 +110,7 @@ way for the user to keep a config file in their project. As it stand, now. you n
 # Goals  
 ### Keep as much of this position independent  
 I would like most of this code to be usable in an unmapped state, i.e, if you are trying to use this library in a reflective
-loader. This may end up driving the project to be a `#[no_std]` crate, in the end.  
+loader. 
 ### Add more mechanisms for avoiding detection for various activities    
 This is just the start. The project started because I needed a way to hide my strings, but I didn't want 
 to manually encrypt and pack strings into my project.  

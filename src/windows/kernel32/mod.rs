@@ -10,11 +10,11 @@ use crate::util::{
     compare_xor_str_and_w_str_bytes, find_char, get_resource_bytes, strlen,
 };
 use crate::windows::ntdll::*;
-use std::ffi::{c_char, CStr, CString};
-use std::mem;
-use std::ptr::{addr_of, addr_of_mut};
-use std::slice::from_raw_parts;
-use std::str::Utf8Error;
+use core::ffi::{c_char, CStr};
+use core::mem;
+use core::ptr::{addr_of, addr_of_mut};
+use core::slice::from_raw_parts;
+use core::str::Utf8Error;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
@@ -22,7 +22,16 @@ pub type FnCreateFileA = unsafe extern "system" fn(
     lpFileName: *const u8,
     dwDesiredAccess: u32,
     dwShareMode: u32,
-    lpSecurityAttributes: *const SECURITY_DESCRIPTOR,
+    lpSecurityAttributes: *const SECURITY_ATTRIBUTES,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: usize,
+) -> usize;
+pub type FnCreateFileW = unsafe extern "system" fn(
+    lpFileName: *const u16,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: *const SECURITY_ATTRIBUTES,
     dwCreationDisposition: u32,
     dwFlagsAndAttributes: u32,
     hTemplateFile: usize,
@@ -30,8 +39,20 @@ pub type FnCreateFileA = unsafe extern "system" fn(
 pub type FnCreateProcessA = unsafe extern "system" fn(
     lpApplicationName: *const u8,
     lpCommandLine: *const u8,
-    lpProcessAttributes: *const SECURITY_DESCRIPTOR,
-    lpThreadAttributes: *const SECURITY_DESCRIPTOR,
+    lpProcessAttributes: *const SECURITY_ATTRIBUTES,
+    lpThreadAttributes: *const SECURITY_ATTRIBUTES,
+    bInheritHandles: u32,
+    dwCreationFlags: u32,
+    lpEnvironment: usize,
+    lpCurrentDirectory: *const u8,
+    lpStartupInfo: *const STARTUPINFOA,
+    lpProcessInformation: *const PROCESS_INFORMATION,
+) -> u32;
+pub type FnCreateProcessW = unsafe extern "system" fn(
+    lpApplicationName: *const u16,
+    lpCommandLine: *const u8,
+    lpProcessAttributes: *const SECURITY_ATTRIBUTES,
+    lpThreadAttributes: *const SECURITY_ATTRIBUTES,
     bInheritHandles: u32,
     dwCreationFlags: u32,
     lpEnvironment: usize,
@@ -54,6 +75,7 @@ pub type FnFreeConsole = unsafe extern "system" fn() -> u32;
 pub type FnFindResourceA =
     unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type FnGetCurrentProcess = unsafe extern "system" fn() -> usize;
+pub type FnGetFileSize = unsafe extern "system" fn(hFile: usize, lpFileSizeHigh: *const u32) -> u32;
 pub type FnGetFinalPathNameByHandleA = unsafe extern "system" fn(
     hFile: usize,
     lpszFilePath: *const u8,
@@ -65,8 +87,14 @@ pub type FnGetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8)
 pub type FnGetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
 pub type FnGetProcAddress =
     unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+pub type FnGetProcessHeap = unsafe extern "system" fn() -> usize;
 pub type FnGetSystemDirectoryA = unsafe extern "system" fn(lpBuffer: *mut u8, uSize: u32) -> u32;
 pub type FnGetSystemDirectoryW = unsafe extern "system" fn(lpBuffer: *mut u16, uSize: u32) -> u32;
+pub type FnHeapAlloc =
+    unsafe extern "system" fn(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize;
+pub type FnHeapFree = unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32;
+pub type FnHeapReAlloc =
+    unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize;
 pub type FnIsProcessorFeaturePresent = unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
 pub type FnLoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type FnLoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
@@ -78,10 +106,29 @@ pub type FnOpenFile = unsafe extern "system" fn(
 ) -> i32;
 pub type FnOpenProcess =
     unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+pub type FnOVERLAPPED_COMPLETION_ROUTINE = unsafe extern "system" fn(
+    dwErrorCode: u32,
+    dwNumberOfBytesTransfered: u32,
+    lpOverlapped: *mut OVERLAPPED,
+);
 pub type FnProcess32First =
     unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnProcess32Next =
     unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+pub type FnReadFile = unsafe extern "system" fn(
+    hFile: usize,
+    lpBuffer: *mut u8,
+    nNumberOfBytesToRead: u32,
+    lpNumberOfBytesRead: *mut u32,
+    lpOverlapped: *mut OVERLAPPED,
+) -> u32;
+pub type FnReadFileEx = unsafe extern "system" fn(
+    hFile: usize,
+    lpBuffer: *mut u8,
+    nNumberOfBytesToRead: u32,
+    lpOverlapped: *mut OVERLAPPED,
+    lpCompletionRoutine: FnOVERLAPPED_COMPLETION_ROUTINE,
+) -> u32;
 pub type FnReadProcessMemory = unsafe extern "system" fn(
     hProcess: usize,
     lpBaseAddress: usize,
@@ -291,6 +338,19 @@ pub const FILE_SUPPORTS_SPARSE_VDL: u32 = 0x10000000;
 pub const FILE_DAX_VOLUME: u32 = 0x20000000;
 pub const FILE_SUPPORTS_GHOSTING: u32 = 0x40000000;
 
+pub const FILE_FLAG_WRITE_THROUGH: u32 = 0x80000000;
+pub const FILE_FLAG_OVERLAPPED: u32 = 0x40000000;
+pub const FILE_FLAG_NO_BUFFERING: u32 = 0x20000000;
+pub const FILE_FLAG_RANDOM_ACCESS: u32 = 0x10000000;
+pub const FILE_FLAG_SEQUENTIAL_SCAN: u32 = 0x08000000;
+pub const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x04000000;
+pub const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x02000000;
+pub const FILE_FLAG_POSIX_SEMANTICS: u32 = 0x01000000;
+pub const FILE_FLAG_SESSION_AWARE: u32 = 0x00800000;
+pub const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x00200000;
+pub const FILE_FLAG_OPEN_NO_RECALL: u32 = 0x00100000;
+pub const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x00080000;
+
 pub const CREATE_NEW: u32 = 1;
 pub const CREATE_ALWAYS: u32 = 2;
 pub const OPEN_EXISTING: u32 = 3;
@@ -425,11 +485,11 @@ pub struct PROCESS_INFORMATION {
 
 #[repr(C)]
 pub struct OVERLAPPED {
-    Internal: usize,
-    InternalHigh: usize,
-    Offset: u32,
-    OffsetHigh: u32,
-    hEvent: usize,
+    pub Internal: usize,
+    pub InternalHigh: usize,
+    pub Offset: u32,
+    pub OffsetHigh: u32,
+    pub hEvent: usize,
 }
 
 #[repr(C)]
@@ -472,7 +532,7 @@ pub unsafe fn GetModuleHandleInternal(module_name: &[u8]) -> usize {
     let mut list_entry = module_list.Flink;
     while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
         let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
-        let name = std::slice::from_raw_parts(
+        let name = core::slice::from_raw_parts(
             entry.BaseDllName.Buffer,
             entry.BaseDllName.Length as usize / 2,
         );
@@ -500,7 +560,7 @@ pub unsafe fn GetModuleHandleX(xor_string: &[u8], key: &[u8]) -> usize {
     while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
         let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
 
-        let name = std::slice::from_raw_parts(
+        let name = core::slice::from_raw_parts(
             entry.BaseDllName.Buffer,
             entry.BaseDllName.Length as usize / 2,
         );
@@ -524,7 +584,7 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
         mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
     let eat_address = base_address + export_directory.AddressOfFunctions as usize;
-    let eat_array = std::slice::from_raw_parts(
+    let eat_array = core::slice::from_raw_parts(
         eat_address as *const u32,
         export_directory.NumberOfFunctions as usize,
     );
@@ -542,14 +602,14 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
         proc_address = base_address + eat_array[(ordinal - base) as usize] as usize;
     } else {
         let name_table_address = base_address + export_directory.AddressOfNames as usize;
-        let name_table = std::slice::from_raw_parts(
+        let name_table = core::slice::from_raw_parts(
             name_table_address as *const u32,
             export_directory.NumberOfNames as usize,
         );
 
         for i in 0..export_directory.NumberOfNames as usize {
             let string_address = base_address + name_table[i] as usize;
-            let name = std::slice::from_raw_parts(
+            let name = core::slice::from_raw_parts(
                 string_address as *const u8,
                 strlen(string_address as *const u8),
             );
@@ -557,7 +617,7 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
             if compare_strs_as_bytes(proc_name, name, true) {
                 let hints_table_address =
                     base_address + export_directory.AddressOfNameOrdinals as usize;
-                let hints_table = std::slice::from_raw_parts(
+                let hints_table = core::slice::from_raw_parts(
                     hints_table_address as *const u16,
                     export_directory.NumberOfNames as usize,
                 );
@@ -568,8 +628,7 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
     }
 
     if proc_address >= addr_of!(*export_directory) as usize
-        && proc_address
-            < addr_of!(*export_directory) as usize + export_data_directory.Size as usize
+        && proc_address < addr_of!(*export_directory) as usize + export_data_directory.Size as usize
     {
         proc_address = get_fwd_addr(proc_address);
     }
@@ -588,7 +647,7 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
         mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
     let eat_address = base_address + export_directory.AddressOfFunctions as usize;
-    let eat_array = std::slice::from_raw_parts(
+    let eat_array = core::slice::from_raw_parts(
         eat_address as *const u32,
         export_directory.NumberOfFunctions as usize,
     );
@@ -597,19 +656,19 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
     // checking for ordinal can cause issues, here.
     let mut proc_address = 0;
     let name_table_address = base_address + export_directory.AddressOfNames as usize;
-    let name_table = std::slice::from_raw_parts(
+    let name_table = core::slice::from_raw_parts(
         name_table_address as *const u32,
         export_directory.NumberOfNames as usize,
     );
 
     for i in 0..export_directory.NumberOfNames as usize {
         let string_address = (base_address + name_table[i] as usize) as *const u8;
-        let name = std::slice::from_raw_parts(string_address, strlen(string_address));
+        let name = core::slice::from_raw_parts(string_address, strlen(string_address));
 
         if compare_xor_str_and_str_bytes(xor_string, name, key) {
             let hints_table_address =
                 base_address + export_directory.AddressOfNameOrdinals as usize;
-            let hints_table = std::slice::from_raw_parts(
+            let hints_table = core::slice::from_raw_parts(
                 hints_table_address as *const u16,
                 export_directory.NumberOfNames as usize,
             );
@@ -619,8 +678,7 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
     }
 
     if proc_address >= addr_of!(*export_directory) as usize
-        && proc_address
-            < addr_of!(*export_directory) as usize + export_data_directory.Size as usize
+        && proc_address < addr_of!(*export_directory) as usize + export_data_directory.Size as usize
     {
         proc_address = get_fwd_addr(proc_address);
     }
@@ -630,7 +688,7 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
 
 unsafe fn get_fwd_addr(proc_address: usize) -> usize {
     let mut forward_dll =
-        std::slice::from_raw_parts(proc_address as *const u8, strlen(proc_address as *const u8))
+        core::slice::from_raw_parts(proc_address as *const u8, strlen(proc_address as *const u8))
             .to_svec();
 
     let split_pos = match find_char(&forward_dll[..], '.' as u8) {
@@ -648,12 +706,12 @@ unsafe fn get_fwd_addr(proc_address: usize) -> usize {
     }
 
     let string_address = (proc_address + split_pos + 1) as *const u8;
-    let forward_function = std::slice::from_raw_parts(string_address, strlen(string_address));
+    let forward_function = core::slice::from_raw_parts(string_address, strlen(string_address));
     GetProcAddressInternal(forward_handle, forward_function)
 }
 
 pub unsafe fn AllocConsole() -> u32 {
-    let allocConsole: FnAllocConsole = std::mem::transmute(GetProcAddressInternal(
+    let allocConsole: FnAllocConsole = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "AllocConsole".as_bytes(),
     ));
@@ -662,7 +720,7 @@ pub unsafe fn AllocConsole() -> u32 {
 }
 
 pub unsafe fn CloseHandle(hObject: usize) -> bool {
-    let closeHandle: FnCloseHandle = std::mem::transmute(GetProcAddressX(
+    let closeHandle: FnCloseHandle = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -678,12 +736,12 @@ pub unsafe fn CreateFileA(
     lpFileName: *const u8,
     dwDesiredAccess: u32,
     dwShareMode: u32,
-    lpSecurityAttributes: *const SECURITY_DESCRIPTOR,
+    lpSecurityAttributes: *const SECURITY_ATTRIBUTES,
     dwCreationDisposition: u32,
     dwFlagsAndAttributes: u32,
     hTemplateFile: usize,
 ) -> usize {
-    let createFileA: FnCreateFileA = std::mem::transmute(GetProcAddressX(
+    let createFileA: FnCreateFileA = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -703,11 +761,40 @@ pub unsafe fn CreateFileA(
     )
 }
 
+pub unsafe fn CreateFileW(
+    lpFileName: *const u16,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: *const SECURITY_ATTRIBUTES,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: usize,
+) -> usize {
+    let createFileW: FnCreateFileW = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, CREATEFILEW_POS, CREATEFILEW_LEN),
+        get_resource_bytes(RESOURCE_ID, CREATEFILEW_KEY, CREATEFILEW_LEN),
+    ));
+
+    createFileW(
+        lpFileName,
+        dwDesiredAccess,
+        dwShareMode,
+        lpSecurityAttributes,
+        dwCreationDisposition,
+        dwFlagsAndAttributes,
+        hTemplateFile,
+    )
+}
+
 pub unsafe fn CreateProcessA(
     lpApplicationName: *const u8,
     lpCommandLine: *const u8,
-    lpProcessAttributes: *const SECURITY_DESCRIPTOR,
-    lpThreadAttributes: *const SECURITY_DESCRIPTOR,
+    lpProcessAttributes: *const SECURITY_ATTRIBUTES,
+    lpThreadAttributes: *const SECURITY_ATTRIBUTES,
     bInheritHandles: u32,
     dwCreationFlags: u32,
     lpEnvironment: usize,
@@ -715,7 +802,7 @@ pub unsafe fn CreateProcessA(
     lpStartupInfo: *const STARTUPINFOA,
     lpProcessInformation: *const PROCESS_INFORMATION,
 ) -> u32 {
-    let createProcessA: FnCreateProcessA = std::mem::transmute(GetProcAddressX(
+    let createProcessA: FnCreateProcessA = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -738,6 +825,41 @@ pub unsafe fn CreateProcessA(
     )
 }
 
+pub unsafe fn CreateProcessW(
+    lpApplicationName: *const u16,
+    lpCommandLine: *const u8,
+    lpProcessAttributes: *const SECURITY_ATTRIBUTES,
+    lpThreadAttributes: *const SECURITY_ATTRIBUTES,
+    bInheritHandles: u32,
+    dwCreationFlags: u32,
+    lpEnvironment: usize,
+    lpCurrentDirectory: *const u8,
+    lpStartupInfo: *const STARTUPINFOA,
+    lpProcessInformation: *const PROCESS_INFORMATION,
+) -> u32 {
+    let createProcessW: FnCreateProcessW = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, CREATEPROCESSW_POS, CREATEPROCESSW_LEN),
+        get_resource_bytes(RESOURCE_ID, CREATEPROCESSW_KEY, CREATEPROCESSW_LEN),
+    ));
+
+    createProcessW(
+        lpApplicationName,
+        lpCommandLine,
+        lpProcessAttributes,
+        lpThreadAttributes,
+        bInheritHandles,
+        dwCreationFlags,
+        lpEnvironment,
+        lpCurrentDirectory,
+        lpStartupInfo,
+        lpProcessInformation,
+    )
+}
+
 pub unsafe fn CreateRemoteThread(
     hProcess: usize,
     lpThreadAttributes: usize,
@@ -747,7 +869,7 @@ pub unsafe fn CreateRemoteThread(
     dwCreationFlags: u32,
     lpThreadId: *mut u32,
 ) -> usize {
-    let createRemoteThread: FnCreateRemoteThread = std::mem::transmute(GetProcAddressX(
+    let createRemoteThread: FnCreateRemoteThread = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -769,7 +891,7 @@ pub unsafe fn CreateRemoteThread(
 
 pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usize {
     let createToolhelp32Snapshot: FnCreateToolhelp32Snapshot =
-        std::mem::transmute(GetProcAddressX(
+        core::mem::transmute(GetProcAddressX(
             GetModuleHandleX(
                 get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
                 get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -790,7 +912,7 @@ pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usiz
 }
 
 pub unsafe fn FreeConsole() -> u32 {
-    let freeConsole: FnFreeConsole = std::mem::transmute(GetProcAddressInternal(
+    let freeConsole: FnFreeConsole = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "FreeConsole".as_bytes(),
     ));
@@ -801,7 +923,7 @@ pub unsafe fn FreeConsole() -> u32 {
 //FindResourceA
 
 pub unsafe fn GetCurrentProcess() -> usize {
-    let getCurrentProcess: FnGetCurrentProcess = std::mem::transmute(GetProcAddressX(
+    let getCurrentProcess: FnGetCurrentProcess = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -813,6 +935,19 @@ pub unsafe fn GetCurrentProcess() -> usize {
     getCurrentProcess()
 }
 
+pub unsafe fn GetFileSize(hFile: usize, lpFileSizeHigh: *const u32) -> u32 {
+    let getFileSize: FnGetFileSize = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETFILESIZE_POS, GETFILESIZE_LEN),
+        get_resource_bytes(RESOURCE_ID, GETFILESIZE_KEY, GETFILESIZE_LEN),
+    ));
+
+    getFileSize(hFile, lpFileSizeHigh)
+}
+
 pub unsafe fn GetFinalPathNameByHandleA(
     hFile: usize,
     lpszFilePath: *const u8,
@@ -820,7 +955,7 @@ pub unsafe fn GetFinalPathNameByHandleA(
     dwFlags: u32,
 ) -> u32 {
     let getFinalPathNameByHandleA: FnGetFinalPathNameByHandleA =
-        std::mem::transmute(GetProcAddressInternal(
+        core::mem::transmute(GetProcAddressInternal(
             GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
             "GetFinalPathNameByHandleA".as_bytes(),
         ));
@@ -829,7 +964,7 @@ pub unsafe fn GetFinalPathNameByHandleA(
 }
 
 pub unsafe fn GetLastError() -> u32 {
-    let getLastError: FnGetLastError = std::mem::transmute(GetProcAddressX(
+    let getLastError: FnGetLastError = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -842,7 +977,7 @@ pub unsafe fn GetLastError() -> u32 {
 }
 
 pub unsafe fn GetModuleHandleA(lpModuleName: *const u8) -> usize {
-    let getModuleHandleA: FnGetModuleHandleA = std::mem::transmute(GetProcAddressInternal(
+    let getModuleHandleA: FnGetModuleHandleA = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "GetModuleHandleA".as_bytes(),
     ));
@@ -851,7 +986,7 @@ pub unsafe fn GetModuleHandleA(lpModuleName: *const u8) -> usize {
 }
 
 pub unsafe fn GetModuleHandleW(lpModuleName: *const u16) -> usize {
-    let getModuleHandleW: FnGetModuleHandleW = std::mem::transmute(GetProcAddressInternal(
+    let getModuleHandleW: FnGetModuleHandleW = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "GetModuleHandleW".as_bytes(),
     ));
@@ -860,7 +995,7 @@ pub unsafe fn GetModuleHandleW(lpModuleName: *const u16) -> usize {
 }
 
 pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
-    let getProcAddress: FnGetProcAddress = std::mem::transmute(GetProcAddressX(
+    let getProcAddress: FnGetProcAddress = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -872,8 +1007,21 @@ pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
     getProcAddress(hModule, lpProcName)
 }
 
+pub unsafe fn GetProcessHeap() -> usize {
+    let getProcessHeap: FnGetProcessHeap = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, GETPROCESSHEAP_POS, GETPROCESSHEAP_LEN),
+        get_resource_bytes(RESOURCE_ID, GETPROCESSHEAP_KEY, GETPROCESSHEAP_LEN),
+    ));
+
+    getProcessHeap()
+}
+
 pub unsafe fn GetSystemDirectoryA(lpBuffer: *mut u8, uSize: u32) -> u32 {
-    let getSystemDirectoryA: FnGetSystemDirectoryA = std::mem::transmute(GetProcAddressX(
+    let getSystemDirectoryA: FnGetSystemDirectoryA = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -894,7 +1042,7 @@ pub unsafe fn GetSystemDirectoryA(lpBuffer: *mut u8, uSize: u32) -> u32 {
 }
 
 pub unsafe fn GetSystemDirectoryW(lpBuffer: *mut u16, uSize: u32) -> u32 {
-    let getSystemDirectoryW: FnGetSystemDirectoryW = std::mem::transmute(GetProcAddressX(
+    let getSystemDirectoryW: FnGetSystemDirectoryW = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -914,9 +1062,47 @@ pub unsafe fn GetSystemDirectoryW(lpBuffer: *mut u16, uSize: u32) -> u32 {
     getSystemDirectoryW(lpBuffer, uSize)
 }
 
+pub unsafe fn HeapAlloc(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize {
+    let heapAlloc: FnHeapAlloc = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, HEAPALLOC_POS, HEAPALLOC_LEN),
+        get_resource_bytes(RESOURCE_ID, HEAPALLOC_KEY, HEAPALLOC_LEN),
+    ));
+
+    heapAlloc(hHeap, dwFlags, dwBytes)
+}
+
+pub unsafe fn HeapFree(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32{
+    let heapFree: FnHeapFree = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, HEAPFREE_POS, HEAPFREE_LEN),
+        get_resource_bytes(RESOURCE_ID, HEAPFREE_KEY, HEAPFREE_LEN),
+    ));
+
+    heapFree(hHeap, dwFlags, lpMem)
+}
+pub unsafe fn HeapReAlloc(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize {
+    let heapAlloc: FnHeapReAlloc = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, HEAPREALLOC_POS, HEAPREALLOC_LEN),
+        get_resource_bytes(RESOURCE_ID, HEAPREALLOC_KEY, HEAPREALLOC_LEN),
+    ));
+
+    heapAlloc(hHeap, dwFlags, lpMem, dwBytes)
+}
+
 pub unsafe fn IsProcessorFeaturePresent(ProcessorFeature: u32) -> u32 {
     let isProcessorFeaturePresent: FnIsProcessorFeaturePresent =
-        std::mem::transmute(GetProcAddressInternal(
+        core::mem::transmute(GetProcAddressInternal(
             GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
             "IsProcessorFeaturePresent".as_bytes(),
         ));
@@ -925,7 +1111,7 @@ pub unsafe fn IsProcessorFeaturePresent(ProcessorFeature: u32) -> u32 {
 }
 
 pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
-    let loadLibraryA: FnLoadLibraryA = std::mem::transmute(GetProcAddressX(
+    let loadLibraryA: FnLoadLibraryA = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -942,7 +1128,7 @@ pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
 // LockResource
 
 pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uStyle: u32) -> i32 {
-    let openFile: FnOpenFile = std::mem::transmute(GetProcAddressX(
+    let openFile: FnOpenFile = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -955,7 +1141,7 @@ pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uSt
 }
 
 pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize {
-    let openProcess: FnOpenProcess = std::mem::transmute(GetProcAddressX(
+    let openProcess: FnOpenProcess = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -968,7 +1154,7 @@ pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId
 }
 
 pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 {
-    let process32First: FnProcess32First = std::mem::transmute(GetProcAddressX(
+    let process32First: FnProcess32First = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -981,7 +1167,7 @@ pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32
 }
 
 pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 {
-    let process32Next: FnProcess32Next = std::mem::transmute(GetProcAddressX(
+    let process32Next: FnProcess32Next = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -993,6 +1179,56 @@ pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 
     process32Next(hSnapshot, lppe)
 }
 
+pub unsafe fn ReadFile(
+    hFile: usize,
+    lpBuffer: *mut u8,
+    nNumberOfBytesToRead: u32,
+    lpNumberOfBytesRead: *mut u32,
+    lpOverlapped: *mut OVERLAPPED,
+) -> u32 {
+    let readFile: FnReadFile = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, READFILE_POS, READFILE_LEN),
+        get_resource_bytes(RESOURCE_ID, READFILE_KEY, READFILE_LEN),
+    ));
+
+    readFile(
+        hFile,
+        lpBuffer,
+        nNumberOfBytesToRead,
+        lpNumberOfBytesRead,
+        lpOverlapped,
+    )
+}
+
+pub unsafe fn ReadFileEx(
+    hFile: usize,
+    lpBuffer: *mut u8,
+    nNumberOfBytesToRead: u32,
+    lpOverlapped: *mut OVERLAPPED,
+    lpCompletionRoutine: FnOVERLAPPED_COMPLETION_ROUTINE,
+) -> u32 {
+    let readFileEx: FnReadFileEx = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, READFILEEX_POS, READFILEEX_LEN),
+        get_resource_bytes(RESOURCE_ID, READFILEEX_KEY, READFILEEX_LEN),
+    ));
+
+    readFileEx(
+        hFile,
+        lpBuffer,
+        nNumberOfBytesToRead,
+        lpOverlapped,
+        lpCompletionRoutine,
+    )
+}
+
 pub unsafe fn ReadProcessMemory(
     hProcess: usize,
     lpBaseAddress: usize,
@@ -1000,7 +1236,7 @@ pub unsafe fn ReadProcessMemory(
     nSize: usize,
     lpNumberOfBytesRead: *mut usize,
 ) -> u32 {
-    let readProcessMemory: FnReadProcessMemory = std::mem::transmute(GetProcAddressInternal(
+    let readProcessMemory: FnReadProcessMemory = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "ReadProcessMemory".as_bytes(),
     ));
@@ -1015,7 +1251,7 @@ pub unsafe fn ReadProcessMemory(
 }
 
 pub unsafe fn ResumeThread(hThread: usize) -> u32 {
-    let resumeThread: FnResumeThread = std::mem::transmute(GetProcAddressX(
+    let resumeThread: FnResumeThread = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1028,7 +1264,7 @@ pub unsafe fn ResumeThread(hThread: usize) -> u32 {
 }
 
 pub unsafe fn SetStdHandle(nStdHandle: u32, hHandle: usize) -> u32 {
-    let setStdHandle: FnSetStdHandle = std::mem::transmute(GetProcAddressInternal(
+    let setStdHandle: FnSetStdHandle = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "SetStdHandle".as_bytes(),
     ));
@@ -1044,7 +1280,7 @@ pub unsafe fn VirtualAlloc(
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize {
-    let virtualAlloc: FnVirtualAlloc = std::mem::transmute(GetProcAddressX(
+    let virtualAlloc: FnVirtualAlloc = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1063,7 +1299,7 @@ pub unsafe fn VirtualAllocEx(
     flAllocationType: u32,
     flProtect: u32,
 ) -> usize {
-    let virtualAllocEx: FnVirtualAllocEx = std::mem::transmute(GetProcAddressX(
+    let virtualAllocEx: FnVirtualAllocEx = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1076,7 +1312,7 @@ pub unsafe fn VirtualAllocEx(
 }
 
 pub unsafe fn VirtualFree(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize {
-    let virtualFree: FnVirtualFree = std::mem::transmute(GetProcAddressX(
+    let virtualFree: FnVirtualFree = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1094,7 +1330,7 @@ pub unsafe fn VirtualFreeEx(
     dwSize: usize,
     dwFreeType: u32,
 ) -> usize {
-    let virtualFreeEx: FnVirtualFreeEx = std::mem::transmute(GetProcAddressX(
+    let virtualFreeEx: FnVirtualFreeEx = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1112,7 +1348,7 @@ pub unsafe fn VirtualProtect(
     flNewProtect: u32,
     lpflOldProtect: *mut u32,
 ) -> u32 {
-    let virtualProtect: FnVirtualProtect = std::mem::transmute(GetProcAddressX(
+    let virtualProtect: FnVirtualProtect = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1129,7 +1365,7 @@ pub unsafe fn VirtualQuery(
     lpBuffer: &mut MEMORY_BASIC_INFORMATION,
     dwLength: usize,
 ) -> usize {
-    let virtualQuery: FnVirtualQuery = std::mem::transmute(GetProcAddressInternal(
+    let virtualQuery: FnVirtualQuery = core::mem::transmute(GetProcAddressInternal(
         GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
         "VirtualQuery".as_bytes(),
     ));
@@ -1138,7 +1374,7 @@ pub unsafe fn VirtualQuery(
 }
 
 pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
-    let waitForSingleObject: FnWaitForSingleObject = std::mem::transmute(GetProcAddressX(
+    let waitForSingleObject: FnWaitForSingleObject = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1165,7 +1401,7 @@ pub unsafe fn WriteFile(
     lpNumberOfBytesWritten: *const u32,
     lpOverlapped: *const OVERLAPPED,
 ) -> u32 {
-    let writeFile: FnWriteFile = std::mem::transmute(GetProcAddressX(
+    let writeFile: FnWriteFile = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1190,7 +1426,7 @@ pub unsafe fn WriteProcessMemory(
     nSize: usize,
     lpNumberOfBytesWritten: usize,
 ) -> u32 {
-    let writeProcessMemory: FnWriteProcessMemory = std::mem::transmute(GetProcAddressX(
+    let writeProcessMemory: FnWriteProcessMemory = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
@@ -1205,11 +1441,15 @@ pub unsafe fn WriteProcessMemory(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::std::fs;
     use crate::util::strlenw;
     use crate::windows::pe::PE;
-    use std::cmp::max;
-    use std::mem::size_of;
-    use std::{cmp, fs};
+    use alloc::format;
+    use alloc::string::String;
+    use alloc::vec::Vec;
+    use core::cmp;
+    use core::cmp::max;
+    use core::mem::size_of;
 
     #[test]
     fn geb_peb() {
@@ -1251,17 +1491,17 @@ mod tests {
             let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
                 mem::transmute(base_addr + export_dir.VirtualAddress as usize);
 
-            let name_dir = std::slice::from_raw_parts(
+            let name_dir = core::slice::from_raw_parts(
                 (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
                 image_export_directory.NumberOfNames as usize,
             );
-            let ordinal_dir = std::slice::from_raw_parts(
+            let ordinal_dir = core::slice::from_raw_parts(
                 (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
                 image_export_directory.NumberOfNames as usize,
             );
 
             for i in 0..name_dir.len() {
-                let name = std::slice::from_raw_parts(
+                let name = core::slice::from_raw_parts(
                     (base_addr + name_dir[i] as usize) as *const u8,
                     strlen((base_addr + name_dir[i] as usize) as *const u8),
                 );
@@ -1373,7 +1613,7 @@ mod tests {
             // adjusting the offset.
             let section_base = addr_of!(*nt_header) as usize + size_of::<IMAGE_NT_HEADERS>();
             let section_header_length = cmp::min(nt_header.OptionalHeader.NumberOfRvaAndSizes, 16);
-            let mut section_headers = std::slice::from_raw_parts_mut(
+            let mut section_headers = core::slice::from_raw_parts_mut(
                 section_base as *mut IMAGE_SECTION_HEADER,
                 section_header_length as usize,
             );
@@ -1393,7 +1633,7 @@ mod tests {
             let mut buffer = [0; MAX_PATH + 1];
             let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
             let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
-            let file = fs::read(format!("{path}/notepad.exe")).unwrap();
+            let file = fs::read(format!("{path}/notepad.exe").as_bytes()).unwrap();
             let v = patch_section_headers(&file);
         }
     }

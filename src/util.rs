@@ -2,16 +2,17 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use crate::windows::kernel32::{MAX_PATH, PAGE_SIZE};
+use alloc::string::String;
+use crate::windows::kernel32::{GetSystemDirectoryA, GetSystemDirectoryW, MAX_PATH, PAGE_SIZE};
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
     IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY,
     RESOURCE_DIRECTORY_TABLE,
 };
 use crate::windows::pe::PE;
-use std::arch::global_asm;
-use std::mem;
-use std::mem::size_of;
+use core::arch::global_asm;
+use core::mem;
+use core::mem::size_of;
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe {
@@ -106,6 +107,11 @@ pub fn strlen(s: *const u8) -> usize {
     len
 }
 
+#[inline(always)]
+pub fn strlen_with_null(s: *const u8) -> usize {
+    strlen(s) + 1
+}
+
 // Need internal function for this in unmapped PE state.
 pub fn strlenw(s: *const u16) -> usize {
     let mut len = 0;
@@ -117,8 +123,8 @@ pub fn strlenw(s: *const u16) -> usize {
 }
 
 #[inline(always)]
-pub fn strlen_with_null(s: *const u8) -> usize {
-    strlen(s) + 1
+pub fn strlenw_with_null(s: *const u16) -> usize {
+    strlenw(s) + 1
 }
 
 // These two xor comparison methods were inspired by Jonas @jonasLyk. Thanks for the idea to just use the xor'd strings. :)
@@ -248,11 +254,20 @@ pub fn compare_strs_as_bytes(
 // Because you can't use the normal rust copy function in an unmapped PE, for some reason.
 pub unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
     let total_size = size_of::<T>() * len;
-    let src_slice = std::slice::from_raw_parts(src as *const u8, total_size);
-    let dst_slice = std::slice::from_raw_parts_mut(dst as *mut u8, total_size);
+    let src_slice = core::slice::from_raw_parts(src as *const u8, total_size);
+    let dst_slice = core::slice::from_raw_parts_mut(dst as *mut u8, total_size);
 
     for i in 0..total_size {
         dst_slice[i] = src_slice[i];
+    }
+}
+
+pub unsafe fn zero_memory<T>(buffer: *mut T, len: usize) {
+    let total_size = size_of::<T>() * len;
+    let dst_slice = core::slice::from_raw_parts_mut(buffer as *mut u8, total_size);
+
+    for i in 0..total_size {
+        dst_slice[i] = 0;
     }
 }
 
@@ -261,7 +276,6 @@ mod tests {
     use super::*;
     use crate::consts::*;
     use crate::windows::kernel32::GetModuleHandleA;
-    use std::sync::Mutex;
 
     #[test]
     fn get_return_addr() {
@@ -295,139 +309,19 @@ mod tests {
     }
 }
 
-// pub(crate) unsafe fn check_mapped(base_address: usize) -> bool {
-//     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
-//     let first_section: &IMAGE_SECTION_HEADER =
-//         mem::transmute(base_address + dos_header.e_lfanew as usize + size_of::<IMAGE_NT_HEADERS>());
-//     let section_on_disk = base_address + first_section.PointerToRawData as usize;
-//     let ptr_to_zero = section_on_disk as *const u64;
-//
-//     *ptr_to_zero == 0
-// }
-//
-// unsafe fn get_resource_mapped(base_address: usize, resource_id: u32) -> &'static [u8] {
-//     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
-//     let nt_header: &IMAGE_NT_HEADERS = mem::transmute(base_address + dos_header.e_lfanew as usize);
-//     let optional_header = &nt_header.OptionalHeader;
-//     let resource_data_dir = &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE as usize];
-//
-//     let resource_directory_table: &RESOURCE_DIRECTORY_TABLE =
-//         mem::transmute(base_address + resource_data_dir.VirtualAddress as usize);
-//
-//     let resource_data_entry = get_resource_data_entry(resource_directory_table, resource_id);
-//     let data = base_address + resource_data_entry.DataRVA as usize;
-//     std::slice::from_raw_parts(data as *const u8, resource_data_entry.DataSize as usize)
-// }
-//
-// unsafe fn get_resource_unmapped(base_address: usize, resource_id: u32) -> &'static [u8] {
-//     let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_address);
-//     let nt_header: &IMAGE_NT_HEADERS = mem::transmute(base_address + dos_header.e_lfanew as usize);
-//     let optional_header = &nt_header.OptionalHeader;
-//     let resource_data_dir = &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE as usize];
-//
-//     let resource_directory_table_foa = rva_to_foa(nt_header, resource_data_dir.VirtualAddress);
-//     let resource_directory_table: &RESOURCE_DIRECTORY_TABLE =
-//         mem::transmute(base_address + resource_directory_table_foa as usize);
-//
-//     let resource_data_entry = get_resource_data_entry(resource_directory_table, resource_id);
-//     let data_foa = rva_to_foa(nt_header, resource_data_entry.DataRVA);
-//     let data = base_address + data_foa as usize;
-//     std::slice::from_raw_parts(data as *const u8, resource_data_entry.DataSize as usize)
-// }
-//
-// unsafe fn get_resource_data_entry(
-//     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
-//     resource_id: u32,
-// ) -> &'static RESOURCE_DATA_ENTRY {
-//     let resource_directory_table_addr = addr_of!(*resource_directory_table) as usize;
-//
-//     //level 1: Resource type directory
-//     let mut offset = get_entry_offset_by_id(resource_directory_table, RT_RCDATA as u32);
-//     offset &= 0x7FFFFFFF;
-//
-//     //level 2: Resource Name/ID subdirectory
-//     let resource_directory_table_name_id: &RESOURCE_DIRECTORY_TABLE =
-//         mem::transmute(resource_directory_table_addr + offset as usize);
-//     let mut offset = get_entry_offset_by_id(resource_directory_table_name_id, resource_id);
-//     offset &= 0x7FFFFFFF;
-//
-//     //level 3: language subdirectory - just use the first entry.
-//     let resource_directory_table_lang: &RESOURCE_DIRECTORY_TABLE =
-//         mem::transmute(resource_directory_table_addr as usize + offset as usize);
-//     let resource_directory_table_lang_entries =
-//         addr_of!(*resource_directory_table_lang) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-//     let resource_directory_table_lang_entry: &IMAGE_RESOURCE_DIRECTORY_ENTRY =
-//         mem::transmute(resource_directory_table_lang_entries);
-//     let offset = resource_directory_table_lang_entry.OffsetToData;
-//
-//     mem::transmute(resource_directory_table_addr as usize + offset as usize)
-// }
-//
-// unsafe fn get_entry_offset_by_id(
-//     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
-//     id: u32,
-// ) -> u32 {
-//     // We have to skip the Name entries, here, to iterate over the entires by Id.
-//     let resource_entries_address = addr_of!(*resource_directory_table) as usize
-//         + size_of::<RESOURCE_DIRECTORY_TABLE>()
-//         + (size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>()
-//         * resource_directory_table.NumberOfNameEntries as usize);
-//     let resource_directory_entries = std::slice::from_raw_parts(
-//         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
-//         resource_directory_table.NumberOfIDEntries as usize,
-//     );
-//
-//     for resource_directory_entry in resource_directory_entries {
-//         if resource_directory_entry.Id == id {
-//             return resource_directory_entry.OffsetToData;
-//         }
-//     }
-//
-//     0
-// }
-//
-// unsafe fn get_entry_offset_by_name(
-//     resource_directory_table: &RESOURCE_DIRECTORY_TABLE,
-//     name: &[u8],
-// ) -> u32 {
-//     let resource_entries_address =
-//         addr_of!(*resource_directory_table) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-//     let resource_directory_entries = std::slice::from_raw_parts(
-//         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
-//         resource_directory_table.NumberOfNameEntries as usize,
-//     );
-//
-//     for resource_directory_entry in resource_directory_entries {
-//         let name_ptr =
-//             addr_of!(*resource_directory_table) as usize + resource_directory_entry.Id as usize;
-//         let resource_name =
-//             std::slice::from_raw_parts(name_ptr as *const u8, strlen(name_ptr as *const u8));
-//         if resource_name == name {
-//             return resource_directory_entry.OffsetToData;
-//         }
-//     }
-//
-//     0
-// }
-//
-// unsafe fn rva_to_foa(nt_headers: &IMAGE_NT_HEADERS, rva: u32) -> u32 {
-//     let section_headers_pointer = addr_of!(*nt_headers) as usize + size_of::<IMAGE_NT_HEADERS>();
-//     let section_headers = std::slice::from_raw_parts(
-//         section_headers_pointer as *const IMAGE_SECTION_HEADER,
-//         nt_headers.FileHeader.NumberOfSections as usize,
-//     );
-//
-//     if rva < section_headers[0].PointerToRawData {
-//         return rva;
-//     }
-//
-//     for section_header in section_headers {
-//         if (rva >= section_header.VirtualAddress)
-//             && (rva <= section_header.VirtualAddress + section_header.SizeOfRawData)
-//         {
-//             return section_header.PointerToRawData + (rva - section_header.VirtualAddress);
-//         }
-//     }
-//
-//     return 0;
-// }
+pub fn get_system_dir() -> String {
+    unsafe {
+        let mut buffer = [0; MAX_PATH + 1];
+        GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
+        String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap()
+    }
+}
+
+pub fn get_system_dir_w() -> String {
+    unsafe {
+        let mut buffer = [0; MAX_PATH + 1];
+        GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
+        let len = strlenw(buffer.as_ptr());
+        String::from_utf16(&buffer[..len]).unwrap()
+    }
+}

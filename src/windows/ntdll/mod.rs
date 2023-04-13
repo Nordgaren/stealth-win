@@ -2,18 +2,88 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use crate::consts::{
-    NTDLL_DLL_KEY, NTDLL_DLL_LEN, NTDLL_DLL_POS, NTFLUSHINSTRUCTIONCACHE_KEY,
-    NTFLUSHINSTRUCTIONCACHE_LEN, NTFLUSHINSTRUCTIONCACHE_POS, RESOURCE_ID,
-};
+use crate::consts::{NTDLL_DLL_KEY, NTDLL_DLL_LEN, NTDLL_DLL_POS, NTFLUSHINSTRUCTIONCACHE_KEY, NTFLUSHINSTRUCTIONCACHE_LEN, NTFLUSHINSTRUCTIONCACHE_POS, NTREADFILE_KEY, NTREADFILE_LEN, NTREADFILE_POS, NTWRITEFILE_KEY, NTWRITEFILE_LEN, NTWRITEFILE_POS, RESOURCE_ID};
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddressX};
-use std::arch::global_asm;
+use core::arch::global_asm;
 
 pub type FnDllMain =
     extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
 pub type FnNtFlushInstructionCache =
     unsafe extern "system" fn(hProcess: usize, lpBaseAddress: usize, dwSize: u32);
+pub type FnNtReadFile = unsafe extern "system" fn(
+    FileHandle: usize,
+    Event: usize,
+    ApcRoutine: u32,
+    ApcContext: u32,
+    IoStatusBlock: *mut IO_STATUS_BLOCK,
+    Buffer: *mut u8,
+    Length: u32,
+    ByteOffset: *const LARGE_INTEGER,
+    Key: *const u32,
+) -> i32;
+pub type FnNtWriteFile = unsafe extern "system" fn(
+    FileHandle: usize,
+    Event: usize,
+    ApcRoutine: u32,
+    ApcContext: u32,
+    IoStatusBlock: *mut IO_STATUS_BLOCK,
+    Buffer: *mut u8,
+    Length: u32,
+    ByteOffset: *const LARGE_INTEGER,
+    Key: *const u32,
+) -> i32;
+
+pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
+pub const IMAGE_NT_SIGNATURE: u32 = 0x4550;
+
+pub const IMAGE_DIRECTORY_ENTRY_ARCHITECTURE: u16 = 7;
+pub const IMAGE_DIRECTORY_ENTRY_BASERELOC: u16 = 5;
+pub const IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT: u16 = 11;
+pub const IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR: u16 = 14;
+pub const IMAGE_DIRECTORY_ENTRY_DEBUG: u16 = 6;
+pub const IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT: u16 = 13;
+pub const IMAGE_DIRECTORY_ENTRY_EXCEPTION: u16 = 3;
+pub const IMAGE_DIRECTORY_ENTRY_EXPORT: u16 = 0;
+pub const IMAGE_DIRECTORY_ENTRY_GLOBALPTR: u16 = 8;
+pub const IMAGE_DIRECTORY_ENTRY_IAT: u16 = 12;
+pub const IMAGE_DIRECTORY_ENTRY_IMPORT: u16 = 1;
+pub const IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG: u16 = 10;
+pub const IMAGE_DIRECTORY_ENTRY_RESOURCE: u16 = 2;
+pub const IMAGE_DIRECTORY_ENTRY_SECURITY: u16 = 4;
+pub const IMAGE_DIRECTORY_ENTRY_TLS: u16 = 9;
+
+pub const DLL_PROCESS_ATTACH: u32 = 1;
+pub const DLL_THREAD_ATTACH: u32 = 2;
+pub const DLL_THREAD_DETACH: u32 = 3;
+pub const DLL_PROCESS_DETACH: u32 = 0;
+
+pub const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
+pub const IMAGE_REL_BASED_HIGH: u16 = 1;
+pub const IMAGE_REL_BASED_LOW: u16 = 2;
+pub const IMAGE_REL_BASED_HIGHLOW: u16 = 3;
+pub const IMAGE_REL_BASED_HIGHADJ: u16 = 4;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_5: u16 = 5;
+pub const IMAGE_REL_BASED_RESERVED: u16 = 6;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_7: u16 = 7;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_8: u16 = 8;
+pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_9: u16 = 9;
+pub const IMAGE_REL_BASED_DIR64: u16 = 10;
+
+pub const MAX_SECTION_HEADER_LEN: u32 = 16;
+
+#[cfg(all(target_pointer_width = "64"))]
+pub const IMAGE_ORDINAL_FLAG: usize = 0x8000000000000000;
+#[cfg(all(target_pointer_width = "32"))]
+pub const IMAGE_ORDINAL_FLAG: usize = 0x80000000;
+
+pub const STATUS_SUCCESS: i32 = 0x00000000;
+pub const STATUS_DELETE_PENDING: i32 = 0xC0000056_u32 as _;
+pub const STATUS_INVALID_PARAMETER: i32 = 0xC000000D_u32 as _;
+
+pub const STATUS_PENDING: i32 = 0x103;
+pub const STATUS_END_OF_FILE: i32 = 0xC0000011_u32 as _;
+pub const STATUS_NOT_IMPLEMENTED: i32 = 0xC0000002_u32 as _;
 
 #[repr(C, packed(2))]
 pub struct IMAGE_DOS_HEADER {
@@ -177,6 +247,12 @@ pub struct IMAGE_IMPORT_BY_NAME {
 }
 
 #[repr(C)]
+pub struct IO_STATUS_BLOCK {
+    pub Status: i32,
+    pub Information: usize,
+}
+
+#[repr(C)]
 pub struct PEB {
     pub InheritedAddressSpace: u8,
     pub ReadImageFileExecOptions: u8,
@@ -210,6 +286,16 @@ pub struct PEB_LDR_DATA {
     pub ShutdownInProgress: u32,
     pub ShutdownThreadId: usize,
 }
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct QuadWord {
+    LowPart: u32,
+    HighPart: u32,
+}
+
+#[repr(C)]
+pub struct LARGE_INTEGER(pub u64);
 
 #[repr(C)]
 pub struct LDR_DATA_TABLE_ENTRY {
@@ -272,49 +358,6 @@ pub struct RESOURCE_DATA_ENTRY {
     pub Reserved: u32,
 }
 
-pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
-pub const IMAGE_NT_SIGNATURE: u32 = 0x4550;
-
-pub const IMAGE_DIRECTORY_ENTRY_ARCHITECTURE: u16 = 7;
-pub const IMAGE_DIRECTORY_ENTRY_BASERELOC: u16 = 5;
-pub const IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT: u16 = 11;
-pub const IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR: u16 = 14;
-pub const IMAGE_DIRECTORY_ENTRY_DEBUG: u16 = 6;
-pub const IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT: u16 = 13;
-pub const IMAGE_DIRECTORY_ENTRY_EXCEPTION: u16 = 3;
-pub const IMAGE_DIRECTORY_ENTRY_EXPORT: u16 = 0;
-pub const IMAGE_DIRECTORY_ENTRY_GLOBALPTR: u16 = 8;
-pub const IMAGE_DIRECTORY_ENTRY_IAT: u16 = 12;
-pub const IMAGE_DIRECTORY_ENTRY_IMPORT: u16 = 1;
-pub const IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG: u16 = 10;
-pub const IMAGE_DIRECTORY_ENTRY_RESOURCE: u16 = 2;
-pub const IMAGE_DIRECTORY_ENTRY_SECURITY: u16 = 4;
-pub const IMAGE_DIRECTORY_ENTRY_TLS: u16 = 9;
-
-pub const DLL_PROCESS_ATTACH: u32 = 1;
-pub const DLL_THREAD_ATTACH: u32 = 2;
-pub const DLL_THREAD_DETACH: u32 = 3;
-pub const DLL_PROCESS_DETACH: u32 = 0;
-
-pub const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
-pub const IMAGE_REL_BASED_HIGH: u16 = 1;
-pub const IMAGE_REL_BASED_LOW: u16 = 2;
-pub const IMAGE_REL_BASED_HIGHLOW: u16 = 3;
-pub const IMAGE_REL_BASED_HIGHADJ: u16 = 4;
-pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_5: u16 = 5;
-pub const IMAGE_REL_BASED_RESERVED: u16 = 6;
-pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_7: u16 = 7;
-pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_8: u16 = 8;
-pub const IMAGE_REL_BASED_MACHINE_SPECIFIC_9: u16 = 9;
-pub const IMAGE_REL_BASED_DIR64: u16 = 10;
-
-pub const MAX_SECTION_HEADER_LEN: u32 = 16;
-
-#[cfg(all(target_pointer_width = "64"))]
-pub const IMAGE_ORDINAL_FLAG: usize = 0x8000000000000000;
-#[cfg(all(target_pointer_width = "32"))]
-pub const IMAGE_ORDINAL_FLAG: usize = 0x80000000;
-
 extern "C" {
     pub fn get_peb() -> &'static PEB;
 }
@@ -336,7 +379,7 @@ _get_peb:
 );
 
 pub unsafe fn NtFlushInstructionCache(hProcess: usize, lpBaseAddress: usize, dwSize: u32) {
-    let ntFlushInstructionCache: FnNtFlushInstructionCache = std::mem::transmute(GetProcAddressX(
+    let ntFlushInstructionCache: FnNtFlushInstructionCache = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
             get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
             get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
@@ -354,4 +397,70 @@ pub unsafe fn NtFlushInstructionCache(hProcess: usize, lpBaseAddress: usize, dwS
     ));
 
     ntFlushInstructionCache(hProcess, lpBaseAddress, dwSize)
+}
+
+pub unsafe fn NtReadFile(
+    FileHandle: usize,
+    Event: usize,
+    ApcRoutine: u32,
+    ApcContext: u32,
+    IoStatusBlock: *mut IO_STATUS_BLOCK,
+    Buffer: *mut u8,
+    Length: u32,
+    ByteOffset: *const LARGE_INTEGER,
+    Key: *const u32,
+) -> i32 {
+    let ntReadFile: FnNtReadFile = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, NTREADFILE_POS, NTREADFILE_LEN),
+        get_resource_bytes(RESOURCE_ID, NTREADFILE_KEY, NTREADFILE_LEN),
+    ));
+
+    ntReadFile(
+        FileHandle,
+        Event,
+        ApcRoutine,
+        ApcContext,
+        IoStatusBlock,
+        Buffer,
+        Length,
+        ByteOffset,
+        Key,
+    )
+}
+
+pub unsafe fn NtWriteFile(
+    FileHandle: usize,
+    Event: usize,
+    ApcRoutine: u32,
+    ApcContext: u32,
+    IoStatusBlock: *mut IO_STATUS_BLOCK,
+    Buffer: *mut u8,
+    Length: u32,
+    ByteOffset: *const LARGE_INTEGER,
+    Key: *const u32,
+) -> i32 {
+    let ntWriteFile: FnNtWriteFile = core::mem::transmute(GetProcAddressX(
+        GetModuleHandleX(
+            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
+            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
+        ),
+        get_resource_bytes(RESOURCE_ID, NTWRITEFILE_POS, NTWRITEFILE_LEN),
+        get_resource_bytes(RESOURCE_ID, NTWRITEFILE_KEY, NTWRITEFILE_LEN),
+    ));
+
+    ntWriteFile(
+        FileHandle,
+        Event,
+        ApcRoutine,
+        ApcContext,
+        IoStatusBlock,
+        Buffer,
+        Length,
+        ByteOffset,
+        Key,
+    )
 }
