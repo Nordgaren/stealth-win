@@ -110,7 +110,9 @@ way for the user to keep a config file in their project. As it stand, now. you n
 # Goals  
 ### Keep as much of this position independent  
 I would like most of this code to be usable in an unmapped state, i.e, if you are trying to use this library in a reflective
-loader. 
+loader.   
+### Works on 32bit and 64bit x86 Windows.  
+Eventually I would also like to include Arm Windows, as well! 
 ### Add more mechanisms for avoiding detection for various activities    
 This is just the start. The project started because I needed a way to hide my strings, but I didn't want 
 to manually encrypt and pack strings into my project.  

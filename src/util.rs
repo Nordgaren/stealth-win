@@ -127,7 +127,8 @@ pub fn strlenw_with_null(s: *const u16) -> usize {
     strlenw(s) + 1
 }
 
-// These two xor comparison methods were inspired by Jonas @jonasLyk. Thanks for the idea to just use the xor'd strings. :)
+// These two xor comparison methods were inspired by Jonas @jonasLyk. Thanks for the idea to just
+// use the xor'd strings. as they are :)
 const CASE_BIT: u8 = 0x20;
 
 // &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the xor'd string
@@ -219,28 +220,26 @@ pub fn compare_str_and_w_str_bytes(
 }
 
 // &[u8] is the second easiest way to deal with C-style strings in Rust. Here we will take in the two
-// strings as &[u8], and will compare them byte by byte. You will want to use this with case_insensitive with
-// any string embedded in the resource, as they are all lowercase.
-pub fn compare_strs_as_bytes(
+// strings as &[u8], and will compare them byte by byte. You will want to use this with case_insensitive
+// with any string embedded in the resource, as they are all lowercase.This function is case insensitive.
+// If you want case sensitive comparison, you can just compare the u8 slices to each other, directly.
+pub fn case_insensitive_compare_strs_as_bytes(
     string_bytes: &[u8],
-    othr_string_bytes: &[u8],
-    case_insensitive: bool,
+    other_string_bytes: &[u8],
 ) -> bool {
-    if string_bytes.len() != othr_string_bytes.len() {
+    if string_bytes.len() != other_string_bytes.len() {
         return false;
     }
 
     for i in 0..string_bytes.len() {
         let mut val = string_bytes[i];
-        let mut val2 = othr_string_bytes[i];
+        let mut val2 = other_string_bytes[i];
 
-        if case_insensitive {
-            if val >= 0x41 && val <= 0x5A {
-                val ^= CASE_BIT
-            }
-            if val2 >= 0x41 && val2 <= 0x5A {
-                val2 ^= CASE_BIT
-            }
+        if val >= 0x41 && val <= 0x5A {
+            val ^= CASE_BIT
+        }
+        if val2 >= 0x41 && val2 <= 0x5A {
+            val2 ^= CASE_BIT
         }
 
         if val != val2 {

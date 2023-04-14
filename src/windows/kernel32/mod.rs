@@ -9,7 +9,7 @@ use core::ffi::{c_char, CStr};
 use crate::consts::*;
 use crate::crypto_util::*;
 use crate::svec::ToSVec;
-use crate::util::{compare_str_and_w_str_bytes, compare_strs_as_bytes, compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, copy_buffer, find_char, get_resource_bytes, strlen};
+use crate::util::{compare_str_and_w_str_bytes, case_insensitive_compare_strs_as_bytes, compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, copy_buffer, find_char, get_resource_bytes, strlen};
 use crate::windows::ntdll::*;
 use core::mem;
 use core::ptr::addr_of;
@@ -613,7 +613,7 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
                 strlen(string_address as *const u8),
             );
 
-            if compare_strs_as_bytes(proc_name, name, true) {
+            if case_insensitive_compare_strs_as_bytes(proc_name, name) {
                 let hints_table_address =
                     base_address + export_directory.AddressOfNameOrdinals as usize;
                 let hints_table = core::slice::from_raw_parts(
@@ -704,9 +704,7 @@ unsafe fn get_fwd_addr(proc_address: usize) -> usize {
         return 0;
     }
 
-    let forward_function = &forward_dll[split_pos + 1..];
-    let forward_str_len = strlen(forward_function.as_ptr());
-    GetProcAddressInternal(forward_handle, &forward_function[..forward_str_len])
+    GetProcAddressInternal(forward_handle, &forward_dll[split_pos + 1..len])
 }
 
 pub unsafe fn AllocConsole() -> u32 {

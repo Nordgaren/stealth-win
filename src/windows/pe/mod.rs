@@ -1,5 +1,5 @@
 use crate::consts::RT_RCDATA;
-use crate::util::{compare_strs_as_bytes, compare_xor_str_and_str_bytes, strlen};
+use crate::util::{case_insensitive_compare_strs_as_bytes, compare_xor_str_and_str_bytes, strlen};
 use crate::windows::ntdll::{
     IMAGE_DATA_DIRECTORY, IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_DIRECTORY_ENTRY_IMPORT,
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_EXPORT_DIRECTORY,
@@ -357,7 +357,7 @@ impl<'a> PE<'a, Base> {
                     strlen(string_address as *const u8),
                 );
 
-                if compare_strs_as_bytes(export_name, name, true) {
+                if case_insensitive_compare_strs_as_bytes(export_name, name) {
                     let mut hints_table_offset = export_directory.AddressOfNameOrdinals;
                     if !self.is_mapped {
                         hints_table_offset = self.rva_to_foa(hints_table_offset)?;
@@ -401,7 +401,7 @@ impl<'a> PE<'a, Base> {
                     strlen((base_addr + name_dir[i] as usize) as *const u8),
                 );
 
-                if compare_strs_as_bytes(name, function_name, true) {
+                if case_insensitive_compare_strs_as_bytes(name, function_name) {
                     return ordinal_dir[i] + image_export_directory.Base as u16;
                 }
             }
