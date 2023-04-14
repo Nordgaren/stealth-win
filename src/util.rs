@@ -271,6 +271,23 @@ pub unsafe fn zero_memory<T>(buffer: *mut T, len: usize) {
     }
 }
 
+pub fn get_system_dir() -> String {
+    unsafe {
+        let mut buffer = [0; MAX_PATH + 1];
+        GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
+        String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap()
+    }
+}
+
+pub fn get_system_dir_w() -> String {
+    unsafe {
+        let mut buffer = [0; MAX_PATH + 1];
+        GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
+        let len = strlenw(buffer.as_ptr());
+        String::from_utf16(&buffer[..len]).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,22 +323,5 @@ mod tests {
             let handle = GetModuleHandleA(0 as *const u8);
             assert_eq!(dll_base, handle)
         }
-    }
-}
-
-pub fn get_system_dir() -> String {
-    unsafe {
-        let mut buffer = [0; MAX_PATH + 1];
-        GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
-        String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap()
-    }
-}
-
-pub fn get_system_dir_w() -> String {
-    unsafe {
-        let mut buffer = [0; MAX_PATH + 1];
-        GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
-        let len = strlenw(buffer.as_ptr());
-        String::from_utf16(&buffer[..len]).unwrap()
     }
 }
