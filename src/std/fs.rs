@@ -9,7 +9,7 @@ use crate::windows::kernel32::{
 use crate::windows::ntdll::{
     NtReadFile, IO_STATUS_BLOCK, LARGE_INTEGER, STATUS_END_OF_FILE, STATUS_PENDING,
 };
-use alloc::borrow::Cow::Borrowed;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem::size_of;

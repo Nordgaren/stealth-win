@@ -2,15 +2,16 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
+use alloc::string::String;
+use alloc::vec;
 use crate::windows::kernel32::{GetSystemDirectoryA, GetSystemDirectoryW, MAX_PATH, PAGE_SIZE};
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
     IMAGE_NT_SIGNATURE, IMAGE_RESOURCE_DIRECTORY_ENTRY, IMAGE_SECTION_HEADER, RESOURCE_DATA_ENTRY,
     RESOURCE_DIRECTORY_TABLE,
 };
+
 use crate::windows::pe::PE;
-use alloc::string::String;
-use alloc::vec;
 use core::arch::global_asm;
 use core::mem::size_of;
 use core::{mem, slice};
@@ -300,8 +301,6 @@ mod tests {
     use super::*;
     use crate::consts::*;
     use crate::windows::kernel32::GetModuleHandleA;
-    use alloc::vec;
-    use alloc::vec::Vec;
 
     #[test]
     fn get_return_addr() {

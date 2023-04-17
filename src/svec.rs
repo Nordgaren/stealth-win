@@ -3,7 +3,6 @@ use crate::windows::kernel32::{
     VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
 };
 use crate::windows::user32::MessageBoxA;
-use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use core::mem::size_of;
