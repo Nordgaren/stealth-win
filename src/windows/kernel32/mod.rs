@@ -7,17 +7,17 @@ mod tests;
 
 use crate::consts::*;
 use crate::crypto_util::*;
-use crate::svec::ToSVec;
+use crate::svec::{SVec, ToSVec};
 use crate::util::{
     case_insensitive_compare_strs_as_bytes, compare_str_and_w_str_bytes,
     compare_xor_str_and_str_bytes, compare_xor_str_and_w_str_bytes, copy_buffer, find_char,
-    get_resource_bytes, strlen,
+    get_resource_bytes, strlen, strlen_with_null,
 };
 use crate::windows::ntdll::*;
 use core::ffi::{c_char, CStr};
-use core::mem;
 use core::ptr::addr_of;
-use core::slice::from_raw_parts;
+use core::{mem, slice};
+use slice::from_raw_parts;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
@@ -522,6 +522,8 @@ pub struct ACL {
     pub Sbz2: u16,
 }
 
+// These two implementations of GetModuleHandle were inspired by reenz0h.
+// credits: reenz0h - @SEKTOR7net, zerosum0x0, and speedi13
 pub unsafe fn GetModuleHandleInternal(module_name: &[u8]) -> usize {
     let peb = get_peb();
 
@@ -535,7 +537,7 @@ pub unsafe fn GetModuleHandleInternal(module_name: &[u8]) -> usize {
     let mut list_entry = module_list.Flink;
     while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
         let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
-        let name = core::slice::from_raw_parts(
+        let name = slice::from_raw_parts(
             entry.BaseDllName.Buffer,
             entry.BaseDllName.Length as usize / 2,
         );
@@ -563,7 +565,7 @@ pub unsafe fn GetModuleHandleX(xor_string: &[u8], key: &[u8]) -> usize {
     while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
         let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
 
-        let name = core::slice::from_raw_parts(
+        let name = slice::from_raw_parts(
             entry.BaseDllName.Buffer,
             entry.BaseDllName.Length as usize / 2,
         );
@@ -576,6 +578,8 @@ pub unsafe fn GetModuleHandleX(xor_string: &[u8], key: &[u8]) -> usize {
     0
 }
 
+// These two implementations of GetProcAddress were inspired by reenz0h.
+// credits: reenz0h - @SEKTOR7net, zerosum0x0, and speedi13
 pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> usize {
     let dos_header: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
     let nt_headers: &'static IMAGE_NT_HEADERS =
@@ -586,9 +590,9 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
     let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
         mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
-    let eat_address = base_address + export_directory.AddressOfFunctions as usize;
-    let eat_array = core::slice::from_raw_parts(
-        eat_address as *const u32,
+    let export_address_table_rva = base_address + export_directory.AddressOfFunctions as usize;
+    let export_address_table_array = slice::from_raw_parts(
+        export_address_table_rva as *const u32,
         export_directory.NumberOfFunctions as usize,
     );
 
@@ -602,17 +606,18 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
             return 0;
         }
 
-        proc_address = base_address + eat_array[(ordinal - base) as usize] as usize;
+        proc_address =
+            base_address + export_address_table_array[(ordinal - base) as usize] as usize;
     } else {
         let name_table_address = base_address + export_directory.AddressOfNames as usize;
-        let name_table = core::slice::from_raw_parts(
+        let name_table = slice::from_raw_parts(
             name_table_address as *const u32,
             export_directory.NumberOfNames as usize,
         );
 
         for i in 0..export_directory.NumberOfNames as usize {
             let string_address = base_address + name_table[i] as usize;
-            let name = core::slice::from_raw_parts(
+            let name = slice::from_raw_parts(
                 string_address as *const u8,
                 strlen(string_address as *const u8),
             );
@@ -620,12 +625,13 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
             if case_insensitive_compare_strs_as_bytes(proc_name, name) {
                 let hints_table_address =
                     base_address + export_directory.AddressOfNameOrdinals as usize;
-                let hints_table = core::slice::from_raw_parts(
+                let hints_table = slice::from_raw_parts(
                     hints_table_address as *const u16,
                     export_directory.NumberOfNames as usize,
                 );
 
-                proc_address = base_address + eat_array[hints_table[i] as usize] as usize;
+                proc_address =
+                    base_address + export_address_table_array[hints_table[i] as usize] as usize;
             }
         }
     }
@@ -649,34 +655,34 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
     let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
         mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
 
-    let eat_address = base_address + export_directory.AddressOfFunctions as usize;
-    let eat_array = core::slice::from_raw_parts(
-        eat_address as *const u32,
+    let export_address_table_rva = base_address + export_directory.AddressOfFunctions as usize;
+    let export_address_table_array = slice::from_raw_parts(
+        export_address_table_rva as *const u32,
         export_directory.NumberOfFunctions as usize,
     );
-
     // We are only loading by name for this function, so remove the ordinal code.
     // checking for ordinal can cause issues, here.
     let mut proc_address = 0;
     let name_table_address = base_address + export_directory.AddressOfNames as usize;
-    let name_table = core::slice::from_raw_parts(
+    let name_table = slice::from_raw_parts(
         name_table_address as *const u32,
         export_directory.NumberOfNames as usize,
     );
 
     for i in 0..export_directory.NumberOfNames as usize {
         let string_address = (base_address + name_table[i] as usize) as *const u8;
-        let name = core::slice::from_raw_parts(string_address, strlen(string_address));
+        let name = slice::from_raw_parts(string_address, strlen(string_address));
 
         if compare_xor_str_and_str_bytes(xor_string, name, key) {
             let hints_table_address =
                 base_address + export_directory.AddressOfNameOrdinals as usize;
-            let hints_table = core::slice::from_raw_parts(
+            let hints_table = slice::from_raw_parts(
                 hints_table_address as *const u16,
                 export_directory.NumberOfNames as usize,
             );
 
-            proc_address = base_address + eat_array[hints_table[i] as usize] as usize;
+            proc_address =
+                base_address + export_address_table_array[hints_table[i] as usize] as usize;
         }
     }
 
@@ -691,8 +697,14 @@ pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &[u8], key: &[u8]
 
 unsafe fn get_fwd_addr(proc_address: usize) -> usize {
     let len = strlen(proc_address as *const u8);
+
+    #[cfg(feature = "no_std")]
     let mut forward_dll = [0; MAX_PATH + 1];
+    #[cfg(feature = "no_std")]
     copy_buffer(proc_address as *const u8, forward_dll.as_mut_ptr(), len);
+
+    #[cfg(not(feature = "no_std"))]
+    let mut forward_dll = slice::from_raw_parts(proc_address as *const u8, len).to_svec();
 
     let split_pos = match find_char(&forward_dll[..], '.' as u8) {
         None => {

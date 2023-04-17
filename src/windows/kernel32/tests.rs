@@ -49,17 +49,17 @@ fn get_function_ordinal(dll_name: &[u8], function_name: &[u8]) -> u16 {
         let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
             mem::transmute(base_addr + export_dir.VirtualAddress as usize);
 
-        let name_dir = core::slice::from_raw_parts(
+        let name_dir = slice::from_raw_parts(
             (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
             image_export_directory.NumberOfNames as usize,
         );
-        let ordinal_dir = core::slice::from_raw_parts(
+        let ordinal_dir = slice::from_raw_parts(
             (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
             image_export_directory.NumberOfNames as usize,
         );
 
         for i in 0..name_dir.len() {
-            let name = core::slice::from_raw_parts(
+            let name = slice::from_raw_parts(
                 (base_addr + name_dir[i] as usize) as *const u8,
                 strlen((base_addr + name_dir[i] as usize) as *const u8),
             );
@@ -95,11 +95,13 @@ fn get_proc_address_by_ordinal() {
 #[test]
 fn get_fwd_proc_address() {
     unsafe {
-        let pAcquireSRWLockExclusive = GetProcAddressInternal(
+        let acquire_srw_lock_exclusive = GetProcAddressInternal(
             GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
             "AcquireSRWLockExclusive".as_bytes(),
         );
-        assert_ne!(pAcquireSRWLockExclusive, 0)
+        let real_acquire_srw_lock_exclusive = GetProcAddress(GetModuleHandleA("kernel32.dll\0".as_ptr()), "AcquireSRWLockExclusive\0".as_ptr());
+
+        assert_eq!(acquire_srw_lock_exclusive, real_acquire_srw_lock_exclusive)
     }
 }
 
@@ -139,7 +141,7 @@ fn get_system_directory_a() {
     unsafe {
         let mut buffer = [0; MAX_PATH + 1];
         let out = GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
-        let path = String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap();
+        let path = String::from_utf8(buffer[..out as usize].to_vec()).unwrap();
         assert!(path.ends_with(r"\Windows\system32"))
     }
 }
@@ -149,7 +151,7 @@ fn get_system_directory_w() {
     unsafe {
         let mut buffer = [0; MAX_PATH + 1];
         let out = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
-        let path = String::from_utf16(&buffer[..strlenw(buffer.as_ptr())]).unwrap();
+        let path = String::from_utf16(&buffer[..out as usize]).unwrap();
         assert!(path.ends_with(r"\Windows\system32"))
     }
 }

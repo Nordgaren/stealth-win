@@ -3,6 +3,7 @@ use crate::util::get_system_dir;
 use crate::windows::kernel32::{GetModuleHandleA, GetProcAddress};
 use crate::windows::pe::PE;
 use alloc::format;
+use crate::consts::{RESOURCE_ID, RT_RCDATA};
 
 #[test]
 fn pe_from_memory_address() {
@@ -76,6 +77,41 @@ fn get_rva() {
 }
 
 #[test]
+fn rva_to_foa() {
+    unsafe {
+        let path = get_system_dir();
+        let file = fs::read(r"C:\Users\malware\Desktop\reflective-dll\target\debug\dyload.dll".as_bytes()).unwrap();
+        let pe = PE::from_slice(&file[..])
+            .unwrap();
+        let load_library_a_address_offset = pe
+            .get_export_rva("ReflectiveLoader".as_bytes())
+            .unwrap();
+
+        let rva = pe.rva_to_foa(load_library_a_address_offset).unwrap();
+
+        assert_ne!(
+            rva,
+            0
+        );
+    }
+}
+
+#[test]
+fn unmapped_pe_resource() {
+    unsafe {
+        let path = get_system_dir();
+        let file = fs::read(r"C:\Users\malware\Desktop\reflective-dll\target\debug\dyload.dll".as_bytes()).unwrap();
+        let pe = PE::from_slice(&file[..])
+            .unwrap();
+        let resource = pe
+            .get_pe_resource(RESOURCE_ID)
+            .unwrap();
+
+        assert_ne!(resource.len(), 0)
+    }
+}
+
+#[test]
 fn get_rva_by_ordinal_on_disk() {
     unsafe {
         let kernel_32_addr = GetModuleHandleA("kernel32.dll\0".as_ptr());
@@ -117,11 +153,11 @@ fn get_rva_on_disk() {
 
 // This test should not compile.
 //     |
-// 135 |                 pe = PE::from_slice(file.as_slice()).unwrap();
+// 184 |                 pe = PE::from_slice(file.as_slice()).unwrap();
 //     |                                     ^^^^^^^^^^^^^^^ borrowed value does not live long enough
-// 136 |             }
+// 185 |             }
 //     |             - `file` dropped here while still borrowed
-// 137 |             assert_ne!(pe.nt_headers().file_header().Machine, 0x8664)
+// 186 |             assert_ne!(pe.nt_headers().file_header().Machine, 0x8664)
 //     |                        --------------- borrow later used here
 // #[test]
 // fn pe_from_file_lifetime_fail() {

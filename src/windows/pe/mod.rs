@@ -13,7 +13,7 @@ use crate::windows::pe::definitions::{
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ptr::addr_of;
-use core::{cmp, mem};
+use core::{cmp, mem, slice};
 
 mod definitions;
 #[cfg(test)]
@@ -89,7 +89,7 @@ impl<'a> PE<'a, Base> {
                 is_mapped: false,
                 phantom_data: PhantomData,
             };
-            pe.is_mapped = pe.check_mapped();
+            pe.is_mapped = pe.check_mapped().unwrap_or(true);
 
             Ok(pe)
         }
@@ -110,38 +110,77 @@ impl<'a> PE<'a, Base> {
                 is_mapped: false,
                 phantom_data: PhantomData,
             };
-            pe.is_mapped = pe.check_mapped();
+            pe.is_mapped = pe.check_mapped().unwrap_or(true);
 
             pe
         }
     }
-    fn check_mapped(&self) -> bool {
+    fn check_mapped(&self) -> Option<bool> {
         unsafe {
             let data_dir = self.nt_headers().optional_header().data_directory();
             let import_data_dir = &data_dir[IMAGE_DIRECTORY_ENTRY_IMPORT as usize];
+            if import_data_dir.Size == 0 {
+                return self.check_mapped_export_dir(data_dir);
+            }
+
             let import_table_addr = self.base_address()
-                + self.rva_to_foa(import_data_dir.VirtualAddress).unwrap() as usize;
+                + self.rva_to_foa(import_data_dir.VirtualAddress)? as usize;
             let length = import_data_dir.Size as usize / size_of::<IMAGE_IMPORT_DESCRIPTOR>();
 
-            let import_descriptor_table = core::slice::from_raw_parts(
+            let import_descriptor_table = slice::from_raw_parts(
                 import_table_addr as *const IMAGE_IMPORT_DESCRIPTOR,
                 length - 1,
             );
 
             for import_descriptor in import_descriptor_table {
-                let string_foa = self.rva_to_foa(import_descriptor.Name).unwrap_or_default();
+                let string_foa = self.rva_to_foa(import_descriptor.Name)?;
                 let string_addr = self.base_address() + string_foa as usize;
-                let disk_slice = core::slice::from_raw_parts(
+                let string = slice::from_raw_parts(
                     string_addr as *const u8,
                     strlen(string_addr as *const u8),
                 );
-                if !disk_slice.is_ascii() {
-                    return true;
+                if !string.is_ascii() {
+                    return Some(true);
                 }
             }
 
-            false
+            Some(false)
         }
+    }
+    unsafe fn check_mapped_export_dir(&self, data_dir: &[IMAGE_DATA_DIRECTORY]) -> Option<bool> {
+        let export_data_dir = &data_dir[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+        if export_data_dir.Size == 0 {
+            return self.check_mapped_by_section();
+        }
+        let export_table_addr:&IMAGE_EXPORT_DIRECTORY = mem::transmute(self.base_address()
+            + self.rva_to_foa(export_data_dir.VirtualAddress)? as usize);
+
+        let function_name_table = slice::from_raw_parts(
+            (self.base_address() + self.rva_to_foa(export_table_addr.AddressOfNames)? as usize) as *const u32,
+            export_table_addr.NumberOfNames as usize,
+        );
+
+        for rva in function_name_table {
+            let string_foa = self.rva_to_foa(*rva)?;
+            let string_addr = self.base_address() + string_foa as usize;
+            let string = slice::from_raw_parts(
+                string_addr as *const u8,
+                strlen(string_addr as *const u8),
+            );
+            if !string.is_ascii() {
+                return Some(true);
+            }
+        }
+
+        Some(false)
+    }
+    unsafe fn check_mapped_by_section(&self) -> Option<bool> {
+        let section_headers = self.section_headers();
+        let first_section_header = &section_headers[0];
+        let first_section_address = self.base_address() + first_section_header.PointerToRawData as usize;
+        let ptr_to_zero = first_section_address as *const u64;
+
+        Some(*ptr_to_zero == 0)
     }
     #[inline(always)]
     pub fn address(&self) -> usize {
@@ -167,7 +206,7 @@ impl<'a> PE<'a, Base> {
     pub fn section_headers(&self) -> &'a [IMAGE_SECTION_HEADER] {
         let section_headers_base = self.nt_headers().address() + self.nt_headers().size_of();
         unsafe {
-            core::slice::from_raw_parts(
+            slice::from_raw_parts(
                 section_headers_base as *mut IMAGE_SECTION_HEADER,
                 cmp::min(
                     self.nt_headers()
@@ -182,7 +221,7 @@ impl<'a> PE<'a, Base> {
     pub fn section_headers_mut(&self) -> &'a [IMAGE_SECTION_HEADER] {
         let section_headers_base = self.nt_headers().address() + self.nt_headers().size_of();
         unsafe {
-            core::slice::from_raw_parts_mut(
+            slice::from_raw_parts_mut(
                 section_headers_base as *mut IMAGE_SECTION_HEADER,
                 cmp::min(
                     self.nt_headers()
@@ -235,7 +274,7 @@ impl<'a> PE<'a, Base> {
             }
 
             let data = self.base_address + data_offset as usize;
-            Some(core::slice::from_raw_parts(
+            Some(slice::from_raw_parts(
                 data as *const u8,
                 resource_data_entry.DataSize as usize,
             ))
@@ -252,12 +291,12 @@ impl<'a> PE<'a, Base> {
         let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
             mem::transmute(self.base_address() + export_directory_offset as usize);
 
-        let mut eat_offset = export_directory.AddressOfFunctions;
+        let mut export_address_table_rva = export_directory.AddressOfFunctions;
         if !self.is_mapped() {
-            eat_offset = self.rva_to_foa(eat_offset)?;
+            export_address_table_rva = self.rva_to_foa(export_address_table_rva)?;
         }
-        let eat_array = core::slice::from_raw_parts(
-            (self.base_address() + eat_offset as usize) as *const u32,
+        let export_address_table_array = slice::from_raw_parts(
+            (self.base_address() + export_address_table_rva as usize) as *const u32,
             export_directory.NumberOfFunctions as usize,
         );
 
@@ -269,7 +308,7 @@ impl<'a> PE<'a, Base> {
             name_table_offset = self.rva_to_foa(name_table_offset)?;
         }
 
-        let function_name_table_array = core::slice::from_raw_parts(
+        let function_name_table_array = slice::from_raw_parts(
             (self.base_address() + name_table_offset as usize) as *const u32,
             export_directory.NumberOfNames as usize,
         );
@@ -281,7 +320,7 @@ impl<'a> PE<'a, Base> {
             }
 
             let string_address = self.base_address() + string_offset as usize;
-            let name = core::slice::from_raw_parts(
+            let name = slice::from_raw_parts(
                 string_address as *const u8,
                 strlen(string_address as *const u8),
             );
@@ -292,12 +331,12 @@ impl<'a> PE<'a, Base> {
                     hints_table_offset = self.rva_to_foa(hints_table_offset)?;
                 }
 
-                let hints_table_array = core::slice::from_raw_parts(
+                let hints_table_array = slice::from_raw_parts(
                     (self.base_address() + hints_table_offset as usize) as *const u16,
                     export_directory.NumberOfNames as usize,
                 );
 
-                return Some(eat_array[hints_table_array[i] as usize]);
+                return Some(export_address_table_array[hints_table_array[i] as usize]);
             }
         }
 
@@ -314,12 +353,12 @@ impl<'a> PE<'a, Base> {
         let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
             mem::transmute(self.base_address() + export_directory_offset as usize);
 
-        let mut eat_offset = export_directory.AddressOfFunctions;
+        let mut export_address_table_rva = export_directory.AddressOfFunctions;
         if !self.is_mapped() {
-            eat_offset = self.rva_to_foa(eat_offset)?;
+            export_address_table_rva = self.rva_to_foa(export_address_table_rva)?;
         }
-        let eat_array = core::slice::from_raw_parts(
-            (self.base_address() + eat_offset as usize) as *const u32,
+        let export_address_table_array = slice::from_raw_parts(
+            (self.base_address() + export_address_table_rva as usize) as *const u32,
             export_directory.NumberOfFunctions as usize,
         );
 
@@ -333,14 +372,14 @@ impl<'a> PE<'a, Base> {
                 return None;
             }
 
-            return Some(eat_array[(ordinal - base) as usize]);
+            return Some(export_address_table_array[(ordinal - base) as usize]);
         } else {
             let mut name_table_offset = export_directory.AddressOfNames;
             if !self.is_mapped {
                 name_table_offset = self.rva_to_foa(name_table_offset)?;
             }
 
-            let function_name_table_array = core::slice::from_raw_parts(
+            let function_name_table_array = slice::from_raw_parts(
                 (self.base_address() + name_table_offset as usize) as *const u32,
                 export_directory.NumberOfNames as usize,
             );
@@ -352,7 +391,7 @@ impl<'a> PE<'a, Base> {
                 }
 
                 let string_address = self.base_address() + string_offset as usize;
-                let name = core::slice::from_raw_parts(
+                let name = slice::from_raw_parts(
                     string_address as *const u8,
                     strlen(string_address as *const u8),
                 );
@@ -363,12 +402,12 @@ impl<'a> PE<'a, Base> {
                         hints_table_offset = self.rva_to_foa(hints_table_offset)?;
                     }
 
-                    let hints_table_array = core::slice::from_raw_parts(
+                    let hints_table_array = slice::from_raw_parts(
                         (self.base_address() + hints_table_offset as usize) as *const u16,
                         export_directory.NumberOfNames as usize,
                     );
 
-                    return Some(eat_array[hints_table_array[i] as usize]);
+                    return Some(export_address_table_array[hints_table_array[i] as usize]);
                 }
             }
         }
@@ -386,17 +425,17 @@ impl<'a> PE<'a, Base> {
             let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
                 mem::transmute(base_addr + export_dir.VirtualAddress as usize);
 
-            let name_dir = core::slice::from_raw_parts(
+            let name_dir = slice::from_raw_parts(
                 (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
                 image_export_directory.NumberOfNames as usize,
             );
-            let ordinal_dir = core::slice::from_raw_parts(
+            let ordinal_dir = slice::from_raw_parts(
                 (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
                 image_export_directory.NumberOfNames as usize,
             );
 
             for i in 0..name_dir.len() {
-                let name = core::slice::from_raw_parts(
+                let name = slice::from_raw_parts(
                     (base_addr + name_dir[i] as usize) as *const u8,
                     strlen((base_addr + name_dir[i] as usize) as *const u8),
                 );
@@ -421,17 +460,17 @@ impl<'a> PE<'a, Base> {
             let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
                 mem::transmute(base_addr + export_dir.VirtualAddress as usize);
 
-            let name_dir = core::slice::from_raw_parts(
+            let name_dir = slice::from_raw_parts(
                 (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
                 image_export_directory.NumberOfNames as usize,
             );
-            let ordinal_dir = core::slice::from_raw_parts(
+            let ordinal_dir = slice::from_raw_parts(
                 (base_addr + image_export_directory.AddressOfNameOrdinals as usize) as *const u16,
                 image_export_directory.NumberOfNames as usize,
             );
 
             for i in 0..name_dir.len() {
-                let name = core::slice::from_raw_parts(
+                let name = slice::from_raw_parts(
                     (base_addr + name_dir[i] as usize) as *const u8,
                     strlen((base_addr + name_dir[i] as usize) as *const u8),
                 );
@@ -482,9 +521,9 @@ impl<'a> PE<'a, NtHeaders> {
     #[inline(always)]
     pub fn size_of(&self) -> usize {
         if self.is_64bit {
-            size_of::<IMAGE_NT_HEADERS64>() as usize
+            size_of::<IMAGE_NT_HEADERS64>()
         } else {
-            size_of::<IMAGE_NT_HEADERS32>() as usize
+            size_of::<IMAGE_NT_HEADERS32>()
         }
     }
 }
@@ -703,7 +742,7 @@ impl<'a> PE<'a, ImageOptionalHeader> {
         }
     }
     #[inline(always)]
-    pub fn data_directory(&self) -> &'a [IMAGE_DATA_DIRECTORY; 16] {
+    pub fn data_directory(&self) -> &'a [IMAGE_DATA_DIRECTORY] {
         if self.is_64bit {
             &self.optional_header64().DataDirectory
         } else {
@@ -747,7 +786,7 @@ fn get_resource_data_entry<'a>(
             mem::transmute(resource_directory_table_lang_entries);
         let offset = resource_directory_table_lang_entry.OffsetToData;
 
-        mem::transmute(resource_directory_table_addr as usize + offset as usize)
+        Some(mem::transmute(resource_directory_table_addr as usize + offset as usize))
     }
 }
 
@@ -760,7 +799,7 @@ unsafe fn get_entry_offset_by_id(
         + size_of::<RESOURCE_DIRECTORY_TABLE>()
         + (size_of::<IMAGE_RESOURCE_DIRECTORY_ENTRY>()
             * resource_directory_table.NumberOfNameEntries as usize);
-    let resource_directory_entries = core::slice::from_raw_parts(
+    let resource_directory_entries = slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
         resource_directory_table.NumberOfIDEntries as usize,
     );
@@ -780,7 +819,7 @@ unsafe fn get_entry_offset_by_name(
 ) -> Option<u32> {
     let resource_entries_address =
         addr_of!(*resource_directory_table) as usize + size_of::<RESOURCE_DIRECTORY_TABLE>();
-    let resource_directory_entries = core::slice::from_raw_parts(
+    let resource_directory_entries = slice::from_raw_parts(
         resource_entries_address as *const IMAGE_RESOURCE_DIRECTORY_ENTRY,
         resource_directory_table.NumberOfNameEntries as usize,
     );
@@ -789,7 +828,7 @@ unsafe fn get_entry_offset_by_name(
         let name_ptr =
             addr_of!(*resource_directory_table) as usize + resource_directory_entry.Id as usize;
         let resource_name =
-            core::slice::from_raw_parts(name_ptr as *const u8, strlen(name_ptr as *const u8));
+            slice::from_raw_parts(name_ptr as *const u8, strlen(name_ptr as *const u8));
         if resource_name == name {
             return Some(resource_directory_entry.OffsetToData);
         }

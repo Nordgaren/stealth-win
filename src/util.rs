@@ -10,9 +10,10 @@ use crate::windows::ntdll::{
 };
 use crate::windows::pe::PE;
 use alloc::string::String;
+use alloc::vec;
 use core::arch::global_asm;
-use core::mem;
 use core::mem::size_of;
+use core::{mem, slice};
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe {
@@ -98,6 +99,7 @@ pub fn find_char(string: &[u8], char: u8) -> Option<usize> {
 }
 
 // Need internal function for this in unmapped PE state.
+#[no_mangle]
 pub fn strlen(s: *const u8) -> usize {
     let mut len = 0;
     while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {
@@ -253,8 +255,8 @@ pub fn case_insensitive_compare_strs_as_bytes(
 // Because you can't use the normal rust copy function in an unmapped PE, for some reason.
 pub unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
     let total_size = size_of::<T>() * len;
-    let src_slice = core::slice::from_raw_parts(src as *const u8, total_size);
-    let dst_slice = core::slice::from_raw_parts_mut(dst as *mut u8, total_size);
+    let src_slice = slice::from_raw_parts(src as *const u8, total_size);
+    let dst_slice = slice::from_raw_parts_mut(dst as *mut u8, total_size);
 
     for i in 0..total_size {
         dst_slice[i] = src_slice[i];
@@ -263,7 +265,7 @@ pub unsafe fn copy_buffer<T>(src: *const T, dst: *mut T, len: usize) {
 
 pub unsafe fn zero_memory<T>(buffer: *mut T, len: usize) {
     let total_size = size_of::<T>() * len;
-    let dst_slice = core::slice::from_raw_parts_mut(buffer as *mut u8, total_size);
+    let dst_slice = slice::from_raw_parts_mut(buffer as *mut u8, total_size);
 
     for i in 0..total_size {
         dst_slice[i] = 0;
@@ -272,7 +274,10 @@ pub unsafe fn zero_memory<T>(buffer: *mut T, len: usize) {
 
 pub fn get_system_dir() -> String {
     unsafe {
+        #[cfg(feature = "no_std")]
         let mut buffer = [0; MAX_PATH + 1];
+        #[cfg(not(feature = "no_std"))]
+        let mut buffer = vec![0; MAX_PATH + 1];
         GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
         String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap()
     }
@@ -280,7 +285,10 @@ pub fn get_system_dir() -> String {
 
 pub fn get_system_dir_w() -> String {
     unsafe {
+        #[cfg(feature = "no_std")]
         let mut buffer = [0; MAX_PATH + 1];
+        #[cfg(not(feature = "no_std"))]
+        let mut buffer = vec![0; MAX_PATH + 1];
         GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
         let len = strlenw(buffer.as_ptr());
         String::from_utf16(&buffer[..len]).unwrap()
@@ -292,6 +300,8 @@ mod tests {
     use super::*;
     use crate::consts::*;
     use crate::windows::kernel32::GetModuleHandleA;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     #[test]
     fn get_return_addr() {

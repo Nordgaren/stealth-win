@@ -10,7 +10,7 @@ use core::mem::size_of;
 use core::ops::{Index, IndexMut, RangeFrom};
 use core::ptr::NonNull;
 use core::slice::{Iter, SliceIndex};
-use core::{cmp, fmt, mem, ptr};
+use core::{cmp, fmt, mem, ptr, slice};
 
 pub struct SVec<T> {
     ptr: NonNull<T>,
@@ -146,11 +146,11 @@ impl<T> SVec<T> {
     }
     #[inline]
     pub fn as_slice(&self) -> &[T] {
-        unsafe { core::slice::from_raw_parts(self.as_ptr(), self.len()) }
+        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
     #[inline]
     pub fn as_mut_slice(&self) -> &mut [T] {
-        unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
     #[inline]
     pub fn clear(&mut self) {

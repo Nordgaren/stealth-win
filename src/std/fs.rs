@@ -18,8 +18,15 @@ use core::{cmp, ptr, slice};
 
 pub fn read(path: &[u8]) -> Result<Vec<u8>, u32> {
     unsafe {
-        let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
+            let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
         copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
+
+        #[cfg(not(feature = "no_std"))]
+            let mut file_path = path.to_svec();
+        #[cfg(not(feature = "no_std"))]
+        file_path.push(0);
 
         let file_handle = CreateFileA(
             file_path.as_ptr(),
@@ -40,8 +47,15 @@ pub fn read(path: &[u8]) -> Result<Vec<u8>, u32> {
 
 pub fn read_w(path: &[u16]) -> Result<Vec<u8>, u32> {
     unsafe {
-        let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
+            let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
         copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
+
+        #[cfg(not(feature = "no_std"))]
+            let mut file_path = path.to_svec();
+        #[cfg(not(feature = "no_std"))]
+        file_path.push(0);
 
         let file_handle = CreateFileW(
             file_path.as_ptr(),
@@ -62,8 +76,15 @@ pub fn read_w(path: &[u16]) -> Result<Vec<u8>, u32> {
 
 pub fn sread(path: &[u8]) -> Result<SVec<u8>, u32> {
     unsafe {
+        #[cfg(feature = "no_std")]
         let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
         copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
+
+        #[cfg(not(feature = "no_std"))]
+        let mut file_path = path.to_svec();
+        #[cfg(not(feature = "no_std"))]
+        file_path.push(0);
 
         let file_handle = CreateFileA(
             file_path.as_ptr(),
@@ -84,8 +105,15 @@ pub fn sread(path: &[u8]) -> Result<SVec<u8>, u32> {
 
 pub fn sread_w(path: &[u16]) -> Result<SVec<u8>, u32> {
     unsafe {
-        let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
+            let mut file_path = [0; MAX_PATH + 1];
+        #[cfg(feature = "no_std")]
         copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
+
+        #[cfg(not(feature = "no_std"))]
+            let mut file_path = path.to_svec();
+        #[cfg(not(feature = "no_std"))]
+        file_path.push(0);
 
         let file_handle = CreateFileW(
             file_path.as_ptr(),
