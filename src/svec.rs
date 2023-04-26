@@ -1,3 +1,5 @@
+// This file is APACHE and MIT licensed from the Rust repo.
+
 use crate::util::copy_buffer;
 use crate::windows::kernel32::{
     VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
