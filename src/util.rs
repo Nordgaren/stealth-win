@@ -2,8 +2,6 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use alloc::string::String;
-use alloc::vec;
 use crate::windows::kernel32::{GetSystemDirectoryA, GetSystemDirectoryW, MAX_PATH, PAGE_SIZE};
 use crate::windows::ntdll::{
     IMAGE_DIRECTORY_ENTRY_RESOURCE, IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS,
@@ -15,6 +13,7 @@ use crate::windows::pe::PE;
 use core::arch::global_asm;
 use core::mem::size_of;
 use core::{mem, slice};
+use crate::svec::SVec;
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe {
@@ -101,9 +100,9 @@ pub fn find_char(string: &[u8], char: u8) -> Option<usize> {
 
 // Need internal function for this in unmapped PE state.
 #[no_mangle]
-pub fn strlen(s: *const u8) -> usize {
+pub unsafe fn strlen(s: *const u8) -> usize {
     let mut len = 0;
-    while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {
+    while *s.add(len) != 0 && len <= MAX_PATH {
         len += 1;
     }
 
@@ -111,14 +110,14 @@ pub fn strlen(s: *const u8) -> usize {
 }
 
 #[inline(always)]
-pub fn strlen_with_null(s: *const u8) -> usize {
+pub unsafe fn strlen_with_null(s: *const u8) -> usize {
     strlen(s) + 1
 }
 
 // Need internal function for this in unmapped PE state.
-pub fn strlenw(s: *const u16) -> usize {
+pub unsafe fn strlenw(s: *const u16) -> usize {
     let mut len = 0;
-    while unsafe { *s.add(len) } != 0 && len <= MAX_PATH {
+    while *s.add(len) != 0 && len <= MAX_PATH {
         len += 1;
     }
 
@@ -126,7 +125,7 @@ pub fn strlenw(s: *const u16) -> usize {
 }
 
 #[inline(always)]
-pub fn strlenw_with_null(s: *const u16) -> usize {
+pub unsafe fn strlenw_with_null(s: *const u16) -> usize {
     strlenw(s) + 1
 }
 
@@ -273,26 +272,24 @@ pub unsafe fn zero_memory<T>(buffer: *mut T, len: usize) {
     }
 }
 
-pub fn get_system_dir() -> String {
+// Might make a String class that doesn't use imports, for these two `get_system_dir` methods.
+pub fn get_system_dir() -> SVec<u8> {
     unsafe {
-        #[cfg(feature = "no_std")]
-        let mut buffer = [0; MAX_PATH + 1];
-        #[cfg(not(feature = "no_std"))]
-        let mut buffer = vec![0; MAX_PATH + 1];
-        GetSystemDirectoryA(buffer.as_mut_ptr(), buffer.len() as u32);
-        String::from_utf8(buffer[..strlen(buffer.as_ptr())].to_vec()).unwrap()
+        let mut buffer = SVec::with_capacity(MAX_PATH + 1);
+        let len = GetSystemDirectoryA(buffer.as_mut_slice().as_mut_ptr(), buffer.capacity() as u32);
+        buffer.set_len(len as usize);
+
+        buffer
     }
 }
 
-pub fn get_system_dir_w() -> String {
+pub fn get_system_dir_w() -> SVec<u16>  {
     unsafe {
-        #[cfg(feature = "no_std")]
-        let mut buffer = [0; MAX_PATH + 1];
-        #[cfg(not(feature = "no_std"))]
-        let mut buffer = vec![0; MAX_PATH + 1];
-        GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32);
-        let len = strlenw(buffer.as_ptr());
-        String::from_utf16(&buffer[..len]).unwrap()
+        let mut buffer = SVec::with_capacity(MAX_PATH + 1);
+        let len = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.capacity() as u32);
+        buffer.set_len(len as usize);
+
+        buffer
     }
 }
 

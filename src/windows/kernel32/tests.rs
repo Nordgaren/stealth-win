@@ -1,3 +1,4 @@
+extern crate alloc;
 use super::*;
 use crate::std::fs;
 use crate::util::strlenw;

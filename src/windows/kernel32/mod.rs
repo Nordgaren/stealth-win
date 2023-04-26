@@ -522,7 +522,7 @@ pub struct ACL {
     pub Sbz2: u16,
 }
 
-// These two implementations of GetModuleHandle were inspired by reenz0h.
+// These two implementations of GetModuleHandle were inspired by reenz0h of Sektor7!
 // credits: reenz0h - @SEKTOR7net, zerosum0x0, and speedi13
 pub unsafe fn GetModuleHandleInternal(module_name: &[u8]) -> usize {
     let peb = get_peb();

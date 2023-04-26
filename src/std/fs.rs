@@ -9,72 +9,13 @@ use crate::windows::kernel32::{
 use crate::windows::ntdll::{
     NtReadFile, IO_STATUS_BLOCK, LARGE_INTEGER, STATUS_END_OF_FILE, STATUS_PENDING,
 };
-
-use alloc::string::String;
-use alloc::vec::Vec;
 use core::mem::size_of;
 use core::ptr::addr_of_mut;
 use core::{cmp, ptr, slice};
+use core::ffi::CStr;
+use core::ffi::c_char;
 
-pub fn read(path: &[u8]) -> Result<Vec<u8>, u32> {
-    unsafe {
-        #[cfg(feature = "no_std")]
-            let mut file_path = [0; MAX_PATH + 1];
-        #[cfg(feature = "no_std")]
-        copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
-
-        #[cfg(not(feature = "no_std"))]
-            let mut file_path = path.to_svec();
-        #[cfg(not(feature = "no_std"))]
-        file_path.push(0);
-
-        let file_handle = CreateFileA(
-            file_path.as_ptr(),
-            GENERIC_READ,
-            FILE_SHARE_READ,
-            0 as *const SECURITY_ATTRIBUTES,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
-            0,
-        );
-        if file_handle == INVALID_HANDLE_VALUE {
-            return Err(GetLastError());
-        }
-
-        read_file_from_handle(file_handle)
-    }
-}
-
-pub fn read_w(path: &[u16]) -> Result<Vec<u8>, u32> {
-    unsafe {
-        #[cfg(feature = "no_std")]
-            let mut file_path = [0; MAX_PATH + 1];
-        #[cfg(feature = "no_std")]
-        copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
-
-        #[cfg(not(feature = "no_std"))]
-            let mut file_path = path.to_svec();
-        #[cfg(not(feature = "no_std"))]
-        file_path.push(0);
-
-        let file_handle = CreateFileW(
-            file_path.as_ptr(),
-            GENERIC_READ,
-            FILE_SHARE_READ,
-            0 as *const SECURITY_ATTRIBUTES,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            0,
-        );
-        if file_handle == INVALID_HANDLE_VALUE {
-            return Err(GetLastError());
-        }
-
-        read_file_from_handle(file_handle)
-    }
-}
-
-pub fn sread(path: &[u8]) -> Result<SVec<u8>, u32> {
+pub fn read(path: &[u8]) -> Result<SVec<u8>, u32> {
     unsafe {
         #[cfg(feature = "no_std")]
         let mut file_path = [0; MAX_PATH + 1];
@@ -103,7 +44,7 @@ pub fn sread(path: &[u8]) -> Result<SVec<u8>, u32> {
     }
 }
 
-pub fn sread_w(path: &[u16]) -> Result<SVec<u8>, u32> {
+pub fn read_w(path: &[u16]) -> Result<SVec<u8>, u32> {
     unsafe {
         #[cfg(feature = "no_std")]
             let mut file_path = [0; MAX_PATH + 1];
@@ -130,22 +71,6 @@ pub fn sread_w(path: &[u16]) -> Result<SVec<u8>, u32> {
 
         sread_file_from_handle(file_handle)
     }
-}
-
-unsafe fn read_file_from_handle(file_handle: usize) -> Result<Vec<u8>, u32> {
-    let mut file_size_high = 0;
-    let file_size_low = GetFileSize(file_handle, addr_of_mut!(file_size_high)) as u64;
-    let file_size = ((file_size_high as u64) << 32) | file_size_low;
-
-    let mut file = Vec::with_capacity(file_size as usize);
-    file.set_len(file_size as usize);
-
-    let result = read_file_to_end(file_handle, &mut file[..]);
-    if result != 0 {
-        return Err(result as u32);
-    }
-
-    Ok(file)
 }
 
 unsafe fn sread_file_from_handle(file_handle: usize) -> Result<SVec<u8>, u32> {
@@ -226,15 +151,16 @@ unsafe fn read_to_buffer(file_handle: usize, buffer: *mut u8, len: u32, offset: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::std::alloc::NoImportAllocator;
     use crate::std::fs;
     use crate::util::get_system_dir;
+    extern crate alloc;
     use alloc::format;
     use core::ffi::CStr;
 
     #[test]
     fn read_file() {
         let path = get_system_dir();
+        let path = path.as_str();
         let file = fs::read(format!("{path}\\..\\SysWOW64\\notepad.exe").as_bytes()).unwrap();
 
         assert_eq!(file[..2], [0x4D, 0x5A]);
@@ -243,19 +169,24 @@ mod tests {
     #[test]
     fn sread_file() {
         let path = get_system_dir();
-        let file = fs::sread(format!("{path}\\..\\SysWOW64\\notepad.exe").as_bytes()).unwrap();
+        let path = path.as_str();
+        let file = fs::read(format!("{path}\\..\\SysWOW64\\notepad.exe").as_bytes()).unwrap();
 
         assert_eq!(file[..2], [0x4D, 0x5A]);
     }
 
+    const LARGE_FILE_LOCATION: &str = "C:\\Users\\malware\\source\\10GB.bin";
+
     #[test]
     // Read a 10GB file. Test takes a long ass time, so keep it as ignore, for now.
     // tests multiple pass NtReadFile
-    // Cannot be done in 32 bit.
+    // I don't want to include the
+    // Cannot be done in 32 bit, so only use it in 64 bit tests.
+    // Comment out ignore to run the test.
     #[cfg(target_arch = "x86_64")]
     #[ignore]
     fn read_large_file() {
-        let file = fs::read(format!("C:\\Users\\malware\\Downloads\\10GB.bin").as_bytes()).unwrap();
+        let file = fs::read(LARGE_FILE_LOCATION.as_bytes()).unwrap();
 
         assert_eq!(file[..2], [0x71, 0x4B]);
         assert_eq!(

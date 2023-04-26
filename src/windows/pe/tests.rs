@@ -1,9 +1,11 @@
+extern crate alloc;
 use crate::std::fs;
 use crate::util::get_system_dir;
 use crate::windows::kernel32::{GetModuleHandleA, GetProcAddress};
 use crate::windows::pe::PE;
 use alloc::format;
 use crate::consts::{RESOURCE_ID, RT_RCDATA};
+
 
 #[test]
 fn pe_from_memory_address() {
@@ -21,6 +23,7 @@ fn pe_from_memory_address() {
 fn pe_from_file_32() {
     unsafe {
         let path = get_system_dir();
+        let path = path.as_str();
         let file = fs::read(format!("{path}\\..\\SysWOW64\\notepad.exe").as_bytes()).unwrap();
         let pe = PE::from_slice(file.as_slice()).unwrap();
         assert_eq!(pe.nt_headers().file_header().Machine, 0x014C)
@@ -31,6 +34,7 @@ fn pe_from_file_32() {
 fn pe_from_file_64() {
     unsafe {
         let path = get_system_dir();
+        let path = path.as_str();
         #[cfg(any(target_arch = "x86_64"))]
         let file = fs::read(format!("{path}\\notepad.exe").as_bytes()).unwrap();
         #[cfg(any(target_arch = "x86"))]
@@ -120,6 +124,7 @@ fn get_rva_by_ordinal_on_disk() {
         let ordinal = pe.get_function_ordinal("LoadLibraryA".as_bytes()) as u32;
 
         let path = get_system_dir();
+        let path = path.as_str();
         let kernel32_file = fs::read(format!("{path}/kernel32.dll").as_bytes()).unwrap();
         let load_library_a_address_ordinal_offset =
             pe.get_export_rva(ordinal.to_le_bytes().as_slice()).unwrap();
@@ -136,6 +141,7 @@ fn get_rva_by_ordinal_on_disk() {
 fn get_rva_on_disk() {
     unsafe {
         let path = get_system_dir();
+        let path = path.as_str();
         let kernel32_file = fs::read(format!("{path}/kernel32.dll").as_bytes()).unwrap();
         let load_library_a_address_offset = PE::from_slice(kernel32_file.as_slice())
             .unwrap()

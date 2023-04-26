@@ -131,7 +131,7 @@ impl<T> SVec<T> {
     }
     #[inline]
     pub unsafe fn set_len(&mut self, new_len: usize) {
-        assert!(new_len <= self.capacity());
+        debug_assert!(new_len <= self.capacity());
 
         self.len = new_len;
     }
@@ -173,6 +173,13 @@ impl<T> SVec<T> {
     }
 }
 
+impl SVec<u8> {
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(self.as_slice()) }
+    }
+}
+
 impl<T> FromIterator<T> for SVec<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut iterator = iter.into_iter();
@@ -201,7 +208,7 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:?}", self.as_slice());
+        write!(f, "{:?}", self.as_slice())?;
         Ok(())
     }
 }
@@ -212,7 +219,7 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:X?}", self.as_slice());
+        write!(f, "{:X?}", self.as_slice())?;
         Ok(())
     }
 }
@@ -223,7 +230,7 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x?}", self.as_slice());
+        write!(f, "{:x?}", self.as_slice())?;
         Ok(())
     }
 }
@@ -274,6 +281,8 @@ impl<T> Drop for SVec<T> {
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+
     use super::*;
     use alloc::format;
     use alloc::string::{String, ToString};
