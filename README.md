@@ -1,6 +1,6 @@
 # stealth-win  
 A Windows framework for creating projects that want to hide from EDR. Includes hiding strings and obfuscating function calls in Rust. Creates and embeds a PE resource with 
-XOR'd strings and AES encrypted payloads on every build. Provides position independant abstractions that work even in and 
+XOR'd strings and AES encrypted payloads on every build. Provides position independant abstractions that work even in an 
 unmapped pe file.
 
 # How to use  
