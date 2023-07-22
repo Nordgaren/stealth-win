@@ -18,7 +18,7 @@ use core::ffi::{c_char, CStr};
 use core::ptr::addr_of;
 use core::{mem, slice};
 use slice::from_raw_parts;
-use crate::resource::XORString;
+use crate::resource::strings::XORString;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;

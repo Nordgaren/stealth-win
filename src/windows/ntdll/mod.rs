@@ -10,7 +10,7 @@ use crate::consts::{
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddressX};
 use core::arch::global_asm;
-use crate::resource::XORString;
+use crate::resource::strings::XORString;
 
 pub type FnDllMain =
     extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;

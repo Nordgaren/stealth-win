@@ -3,7 +3,7 @@
 #![allow(unused)]
 
 use crate::consts::*;
-use crate::resource::XORString;
+use crate::resource::strings::XORString;
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddress, GetProcAddressX};
 

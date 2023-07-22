@@ -17,6 +17,7 @@ no_std = []
 alloc = []
 
 [dependencies]
+widestring = "1.0.2"
 
 [build-dependencies]
 lazy_static = "1.4.0"

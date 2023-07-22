@@ -1,4 +1,6 @@
+use core::ffi::CStr;
 use core::ops::{Range, RangeInclusive};
+use widestring::U16CStr;
 use crate::consts::RESOURCE_ID;
 use crate::util::get_resource_bytes;
 
@@ -49,6 +51,17 @@ impl PartialEq<[u8]> for XORString {
         }
 
         true
+    }
+}
+impl PartialEq<CStr> for XORString {
+    fn eq(&self, other: &CStr) -> bool {
+        self.eq(other.to_bytes())
+    }
+}
+
+impl PartialEq<U16CStr> for XORString {
+    fn eq(&self, other: &U16CStr) -> bool {
+        self.eq(other.as_slice())
     }
 }
 
