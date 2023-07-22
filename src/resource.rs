@@ -1,4 +1,4 @@
-use core::ops::Range;
+use core::ops::{Range, RangeInclusive};
 use crate::consts::RESOURCE_ID;
 use crate::util::get_resource_bytes;
 
@@ -29,7 +29,7 @@ impl XORString {
 }
 
 const CASE_BIT: u8 = 0x20;
-const CASE_RANGE: Range<u8> = 0x41..0x5A;
+const CASE_RANGE: RangeInclusive<u8> = 0x41..=0x5A;
 impl PartialEq<[u8]> for XORString {
     fn eq(&self, other: &[u8]) -> bool {
         if self.resource.len() != other.len() {
