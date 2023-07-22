@@ -11,3 +11,4 @@ pub mod util;
 pub mod windows;
 #[cfg(feature = "no_std")]
 pub mod no_std;
+pub mod resource;

