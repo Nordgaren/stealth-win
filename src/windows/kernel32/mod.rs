@@ -7,6 +7,8 @@ mod tests;
 
 use crate::consts::*;
 use crate::crypto_util::*;
+use crate::ptr::Ptr;
+use crate::resource::strings::XORString;
 use crate::svec::{SVec, ToSVec};
 use crate::util::{
     case_insensitive_compare_strs_as_bytes, compare_str_and_w_str_bytes,
@@ -18,7 +20,6 @@ use core::ffi::{c_char, CStr};
 use core::ptr::addr_of;
 use core::{mem, slice};
 use slice::from_raw_parts;
-use crate::resource::strings::XORString;
 
 pub type FnAllocConsole = unsafe extern "system" fn() -> u32;
 pub type FnCloseHandle = unsafe extern "system" fn(hObject: usize) -> bool;
@@ -537,7 +538,7 @@ pub unsafe fn GetModuleHandleInternal(module_name: &[u8]) -> usize {
 
     let mut list_entry = module_list.Flink;
     while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
-        let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
+        let entry =  Ptr::<TRUNC_LDR_DATA_TABLE_ENTRY>::from_ptr(mem::transmute(list_entry));
         let name = slice::from_raw_parts(
             entry.BaseDllName.Buffer,
             entry.BaseDllName.Length as usize / 2,
@@ -564,7 +565,7 @@ pub unsafe fn GetModuleHandleX(xor_string: &XORString) -> usize {
 
     let mut list_entry = module_list.Flink;
     while addr_of!(*list_entry) as usize != addr_of!(*module_list) as usize {
-        let entry: &'static TRUNC_LDR_DATA_TABLE_ENTRY = mem::transmute(list_entry);
+        let entry =  Ptr::<TRUNC_LDR_DATA_TABLE_ENTRY>::from_ptr(mem::transmute(list_entry));
 
         let name = slice::from_raw_parts(
             entry.BaseDllName.Buffer,
@@ -582,14 +583,14 @@ pub unsafe fn GetModuleHandleX(xor_string: &XORString) -> usize {
 // These two implementations of GetProcAddress were inspired by reenz0h.
 // credits: reenz0h - @SEKTOR7net, zerosum0x0, and speedi13
 pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> usize {
-    let dos_header: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
-    let nt_headers: &'static IMAGE_NT_HEADERS =
-        mem::transmute(base_address + dos_header.e_lfanew as usize);
+    let dos_header = Ptr::<IMAGE_DOS_HEADER>::from_usize(base_address);
+    let nt_headers =
+        Ptr::<IMAGE_NT_HEADERS>::from_usize(base_address + dos_header.e_lfanew as usize);
     let optional_header = &nt_headers.OptionalHeader;
     let export_data_directory =
         &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-    let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
-        mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
+    let export_directory =
+        Ptr::<IMAGE_EXPORT_DIRECTORY>::from_usize(base_address + export_data_directory.VirtualAddress as usize);
 
     let export_address_table_rva = base_address + export_directory.AddressOfFunctions as usize;
     let export_address_table_array = slice::from_raw_parts(
@@ -647,14 +648,14 @@ pub unsafe fn GetProcAddressInternal(base_address: usize, proc_name: &[u8]) -> u
 }
 
 pub unsafe fn GetProcAddressX(base_address: usize, xor_string: &XORString) -> usize {
-    let dos_header: &'static IMAGE_DOS_HEADER = mem::transmute(base_address);
-    let nt_headers: &'static IMAGE_NT_HEADERS =
-        mem::transmute(base_address + dos_header.e_lfanew as usize);
+    let dos_header = Ptr::<IMAGE_DOS_HEADER>::from_usize(base_address);
+    let nt_headers =
+        Ptr::<IMAGE_NT_HEADERS>::from_usize(base_address + dos_header.e_lfanew as usize);
     let optional_header = &nt_headers.OptionalHeader;
     let export_data_directory =
         &optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
-    let export_directory: &'static IMAGE_EXPORT_DIRECTORY =
-        mem::transmute(base_address + export_data_directory.VirtualAddress as usize);
+    let export_directory =
+        Ptr::<IMAGE_EXPORT_DIRECTORY>::from_usize(base_address + export_data_directory.VirtualAddress as usize);
 
     let export_address_table_rva = base_address + export_directory.AddressOfFunctions as usize;
     let export_address_table_array = slice::from_raw_parts(
@@ -734,8 +735,12 @@ pub unsafe fn AllocConsole() -> u32 {
 
 pub unsafe fn CloseHandle(hObject: usize) -> bool {
     let closeHandle: FnCloseHandle = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(CLOSEHANDLE_POS, CLOSEHANDLE_KEY, CLOSEHANDLE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CLOSEHANDLE_POS, CLOSEHANDLE_KEY, CLOSEHANDLE_LEN),
     ));
 
     closeHandle(hObject)
@@ -751,8 +756,12 @@ pub unsafe fn CreateFileA(
     hTemplateFile: usize,
 ) -> usize {
     let createFileA: FnCreateFileA = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(CREATEFILEA_POS, CREATEFILEA_KEY, CREATEFILEA_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CREATEFILEA_POS, CREATEFILEA_KEY, CREATEFILEA_LEN),
     ));
 
     createFileA(
@@ -776,8 +785,12 @@ pub unsafe fn CreateFileW(
     hTemplateFile: usize,
 ) -> usize {
     let createFileW: FnCreateFileW = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(CREATEFILEW_POS, CREATEFILEW_KEY, CREATEFILEW_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CREATEFILEW_POS, CREATEFILEW_KEY, CREATEFILEW_LEN),
     ));
 
     createFileW(
@@ -804,8 +817,12 @@ pub unsafe fn CreateProcessA(
     lpProcessInformation: *const PROCESS_INFORMATION,
 ) -> u32 {
     let createProcessA: FnCreateProcessA = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(CREATEPROCESSA_POS, CREATEPROCESSA_KEY, CREATEPROCESSA_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CREATEPROCESSA_POS, CREATEPROCESSA_KEY, CREATEPROCESSA_LEN),
     ));
 
     createProcessA(
@@ -835,8 +852,12 @@ pub unsafe fn CreateProcessW(
     lpProcessInformation: *const PROCESS_INFORMATION,
 ) -> u32 {
     let createProcessW: FnCreateProcessW = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(CREATEPROCESSW_POS, CREATEPROCESSW_KEY, CREATEPROCESSW_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CREATEPROCESSW_POS, CREATEPROCESSW_KEY, CREATEPROCESSW_LEN),
     ));
 
     createProcessW(
@@ -863,8 +884,16 @@ pub unsafe fn CreateRemoteThread(
     lpThreadId: *mut u32,
 ) -> usize {
     let createRemoteThread: FnCreateRemoteThread = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(CREATEREMOTETHREAD_POS, CREATEREMOTETHREAD_KEY, CREATEREMOTETHREAD_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CREATEREMOTETHREAD_POS,
+            CREATEREMOTETHREAD_KEY,
+            CREATEREMOTETHREAD_LEN,
+        ),
     ));
 
     createRemoteThread(
@@ -881,8 +910,16 @@ pub unsafe fn CreateRemoteThread(
 pub unsafe fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> usize {
     let createToolhelp32Snapshot: FnCreateToolhelp32Snapshot =
         core::mem::transmute(GetProcAddressX(
-            GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-            &XORString::from_offsets(CREATETOOLHELP32SNAPSHOT_POS, CREATETOOLHELP32SNAPSHOT_KEY, CREATETOOLHELP32SNAPSHOT_LEN)
+            GetModuleHandleX(&XORString::from_offsets(
+                KERNEL32_DLL_POS,
+                KERNEL32_DLL_KEY,
+                KERNEL32_DLL_LEN,
+            )),
+            &XORString::from_offsets(
+                CREATETOOLHELP32SNAPSHOT_POS,
+                CREATETOOLHELP32SNAPSHOT_KEY,
+                CREATETOOLHELP32SNAPSHOT_LEN,
+            ),
         ));
 
     createToolhelp32Snapshot(dwFlags, th32ProcessID)
@@ -901,8 +938,16 @@ pub unsafe fn FreeConsole() -> u32 {
 
 pub unsafe fn GetCurrentProcess() -> usize {
     let getCurrentProcess: FnGetCurrentProcess = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETCURRENTPROCESS_POS, GETCURRENTPROCESS_KEY, GETCURRENTPROCESS_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            GETCURRENTPROCESS_POS,
+            GETCURRENTPROCESS_KEY,
+            GETCURRENTPROCESS_LEN,
+        ),
     ));
 
     getCurrentProcess()
@@ -910,8 +955,12 @@ pub unsafe fn GetCurrentProcess() -> usize {
 
 pub unsafe fn GetFileSize(hFile: usize, lpFileSizeHigh: *const u32) -> u32 {
     let getFileSize: FnGetFileSize = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETFILESIZE_POS, GETFILESIZE_KEY, GETFILESIZE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(GETFILESIZE_POS, GETFILESIZE_KEY, GETFILESIZE_LEN),
     ));
 
     getFileSize(hFile, lpFileSizeHigh)
@@ -934,8 +983,12 @@ pub unsafe fn GetFinalPathNameByHandleA(
 
 pub unsafe fn GetLastError() -> u32 {
     let getLastError: FnGetLastError = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETLASTERROR_POS, GETLASTERROR_KEY, GETLASTERROR_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(GETLASTERROR_POS, GETLASTERROR_KEY, GETLASTERROR_LEN),
     ));
 
     getLastError()
@@ -961,8 +1014,12 @@ pub unsafe fn GetModuleHandleW(lpModuleName: *const u16) -> usize {
 
 pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
     let getProcAddress: FnGetProcAddress = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETPROCADDRESS_POS, GETPROCADDRESS_KEY, GETPROCADDRESS_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(GETPROCADDRESS_POS, GETPROCADDRESS_KEY, GETPROCADDRESS_LEN),
     ));
 
     getProcAddress(hModule, lpProcName)
@@ -970,8 +1027,12 @@ pub unsafe fn GetProcAddress(hModule: usize, lpProcName: *const u8) -> usize {
 
 pub unsafe fn GetProcessHeap() -> usize {
     let getProcessHeap: FnGetProcessHeap = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETPROCESSHEAP_POS, GETPROCESSHEAP_KEY, GETPROCESSHEAP_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(GETPROCESSHEAP_POS, GETPROCESSHEAP_KEY, GETPROCESSHEAP_LEN),
     ));
 
     getProcessHeap()
@@ -979,8 +1040,16 @@ pub unsafe fn GetProcessHeap() -> usize {
 
 pub unsafe fn GetSystemDirectoryA(lpBuffer: *mut u8, uSize: u32) -> u32 {
     let getSystemDirectoryA: FnGetSystemDirectoryA = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETSYSTEMDIRECTORYA_POS, GETSYSTEMDIRECTORYA_KEY, GETSYSTEMDIRECTORYA_LEN),
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            GETSYSTEMDIRECTORYA_POS,
+            GETSYSTEMDIRECTORYA_KEY,
+            GETSYSTEMDIRECTORYA_LEN,
+        ),
     ));
 
     getSystemDirectoryA(lpBuffer, uSize)
@@ -988,8 +1057,16 @@ pub unsafe fn GetSystemDirectoryA(lpBuffer: *mut u8, uSize: u32) -> u32 {
 
 pub unsafe fn GetSystemDirectoryW(lpBuffer: *mut u16, uSize: u32) -> u32 {
     let getSystemDirectoryW: FnGetSystemDirectoryW = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(GETSYSTEMDIRECTORYW_POS, GETSYSTEMDIRECTORYW_KEY, GETSYSTEMDIRECTORYW_LEN),
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            GETSYSTEMDIRECTORYW_POS,
+            GETSYSTEMDIRECTORYW_KEY,
+            GETSYSTEMDIRECTORYW_LEN,
+        ),
     ));
 
     getSystemDirectoryW(lpBuffer, uSize)
@@ -997,8 +1074,12 @@ pub unsafe fn GetSystemDirectoryW(lpBuffer: *mut u16, uSize: u32) -> u32 {
 
 pub unsafe fn HeapAlloc(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize {
     let heapAlloc: FnHeapAlloc = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(HEAPALLOC_POS, HEAPALLOC_KEY, HEAPALLOC_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(HEAPALLOC_POS, HEAPALLOC_KEY, HEAPALLOC_LEN),
     ));
 
     heapAlloc(hHeap, dwFlags, dwBytes)
@@ -1006,8 +1087,12 @@ pub unsafe fn HeapAlloc(hHeap: usize, dwFlags: u32, dwBytes: usize) -> usize {
 
 pub unsafe fn HeapFree(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32 {
     let heapFree: FnHeapFree = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(HEAPFREE_POS, HEAPFREE_KEY, HEAPFREE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(HEAPFREE_POS, HEAPFREE_KEY, HEAPFREE_LEN),
     ));
 
     heapFree(hHeap, dwFlags, lpMem)
@@ -1015,8 +1100,12 @@ pub unsafe fn HeapFree(hHeap: usize, dwFlags: u32, lpMem: usize) -> u32 {
 
 pub unsafe fn HeapReAlloc(hHeap: usize, dwFlags: u32, lpMem: usize, dwBytes: usize) -> usize {
     let heapAlloc: FnHeapReAlloc = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(HEAPREALLOC_POS, HEAPREALLOC_KEY, HEAPREALLOC_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(HEAPREALLOC_POS, HEAPREALLOC_KEY, HEAPREALLOC_LEN),
     ));
 
     heapAlloc(hHeap, dwFlags, lpMem, dwBytes)
@@ -1034,8 +1123,12 @@ pub unsafe fn IsProcessorFeaturePresent(ProcessorFeature: u32) -> u32 {
 
 pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
     let loadLibraryA: FnLoadLibraryA = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(LOADLIBRARYA_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(LOADLIBRARYA_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
     ));
 
     loadLibraryA(lpLibFileName)
@@ -1047,8 +1140,12 @@ pub unsafe fn LoadLibraryA(lpLibFileName: *const u8) -> usize {
 
 pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uStyle: u32) -> i32 {
     let openFile: FnOpenFile = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(OPENFILE_POS, OPENFILE_KEY, OPENFILE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(OPENFILE_POS, OPENFILE_KEY, OPENFILE_LEN),
     ));
 
     openFile(lpFileName, lpReOpenBuff, uStyle)
@@ -1056,8 +1153,12 @@ pub unsafe fn OpenFile(lpFileName: *const u8, lpReOpenBuff: *const OFSTRUCT, uSt
 
 pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId: u32) -> usize {
     let openProcess: FnOpenProcess = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(OPENPROCESS_POS, OPENPROCESS_KEY, OPENPROCESS_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(OPENPROCESS_POS, OPENPROCESS_KEY, OPENPROCESS_LEN),
     ));
 
     openProcess(dwDesiredAccess, bInheritHandle, dwProcessId)
@@ -1065,8 +1166,12 @@ pub unsafe fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: u32, dwProcessId
 
 pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 {
     let process32First: FnProcess32First = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(PROCESS32FIRST_POS, PROCESS32FIRST_KEY, PROCESS32FIRST_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(PROCESS32FIRST_POS, PROCESS32FIRST_KEY, PROCESS32FIRST_LEN),
     ));
 
     process32First(hSnapshot, lppe)
@@ -1074,8 +1179,12 @@ pub unsafe fn Process32First(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32
 
 pub unsafe fn Process32Next(hSnapshot: usize, lppe: *mut PROCESSENTRY32) -> u32 {
     let process32Next: FnProcess32Next = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(PROCESS32NEXT_POS, PROCESS32NEXT_KEY, PROCESS32NEXT_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(PROCESS32NEXT_POS, PROCESS32NEXT_KEY, PROCESS32NEXT_LEN),
     ));
 
     process32Next(hSnapshot, lppe)
@@ -1089,8 +1198,12 @@ pub unsafe fn ReadFile(
     lpOverlapped: *mut OVERLAPPED,
 ) -> u32 {
     let readFile: FnReadFile = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(READFILE_POS, READFILE_KEY, READFILE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(READFILE_POS, READFILE_KEY, READFILE_LEN),
     ));
 
     readFile(
@@ -1110,8 +1223,12 @@ pub unsafe fn ReadFileEx(
     lpCompletionRoutine: FnOVERLAPPED_COMPLETION_ROUTINE,
 ) -> u32 {
     let readFileEx: FnReadFileEx = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(READFILEEX_POS, READFILEEX_KEY, READFILEEX_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(READFILEEX_POS, READFILEEX_KEY, READFILEEX_LEN),
     ));
 
     readFileEx(
@@ -1146,8 +1263,12 @@ pub unsafe fn ReadProcessMemory(
 
 pub unsafe fn ResumeThread(hThread: usize) -> u32 {
     let resumeThread: FnResumeThread = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(RESUMETHREAD_POS, RESUMETHREAD_KEY, RESUMETHREAD_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(RESUMETHREAD_POS, RESUMETHREAD_KEY, RESUMETHREAD_LEN),
     ));
 
     resumeThread(hThread)
@@ -1171,8 +1292,12 @@ pub unsafe fn VirtualAlloc(
     flProtect: u32,
 ) -> usize {
     let virtualAlloc: FnVirtualAlloc = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(VIRTUALALLOC_POS, VIRTUALALLOC_KEY, VIRTUALALLOC_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(VIRTUALALLOC_POS, VIRTUALALLOC_KEY, VIRTUALALLOC_LEN),
     ));
 
     virtualAlloc(lpAddress, dwSize, flAllocationType, flProtect)
@@ -1186,8 +1311,12 @@ pub unsafe fn VirtualAllocEx(
     flProtect: u32,
 ) -> usize {
     let virtualAllocEx: FnVirtualAllocEx = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(VIRTUALALLOCEX_POS, VIRTUALALLOCEX_KEY, VIRTUALALLOCEX_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(VIRTUALALLOCEX_POS, VIRTUALALLOCEX_KEY, VIRTUALALLOCEX_LEN),
     ));
 
     virtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect)
@@ -1195,8 +1324,12 @@ pub unsafe fn VirtualAllocEx(
 
 pub unsafe fn VirtualFree(lpAddress: usize, dwSize: usize, dwFreeType: u32) -> usize {
     let virtualFree: FnVirtualFree = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(VIRTUALFREE_POS, VIRTUALFREE_KEY, VIRTUALFREE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(VIRTUALFREE_POS, VIRTUALFREE_KEY, VIRTUALFREE_LEN),
     ));
 
     virtualFree(lpAddress, dwSize, dwFreeType)
@@ -1209,8 +1342,12 @@ pub unsafe fn VirtualFreeEx(
     dwFreeType: u32,
 ) -> usize {
     let virtualFreeEx: FnVirtualFreeEx = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(VIRTUALFREEEX_POS, VIRTUALFREEEX_KEY, VIRTUALFREEEX_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(VIRTUALFREEEX_POS, VIRTUALFREEEX_KEY, VIRTUALFREEEX_LEN),
     ));
 
     virtualFreeEx(hProcess, lpAddress, dwSize, dwFreeType)
@@ -1223,8 +1360,12 @@ pub unsafe fn VirtualProtect(
     lpflOldProtect: *mut u32,
 ) -> u32 {
     let virtualProtect: FnVirtualProtect = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(VIRTUALPROTECT_POS, VIRTUALPROTECT_KEY, VIRTUALPROTECT_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(VIRTUALPROTECT_POS, VIRTUALPROTECT_KEY, VIRTUALPROTECT_LEN),
     ));
 
     virtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
@@ -1245,8 +1386,16 @@ pub unsafe fn VirtualQuery(
 
 pub unsafe fn WaitForSingleObject(hProcess: usize, dwMilliseconds: u32) -> u32 {
     let waitForSingleObject: FnWaitForSingleObject = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(WAITFORSINGLEOBJECT_POS, WAITFORSINGLEOBJECT_KEY, WAITFORSINGLEOBJECT_LEN),
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            WAITFORSINGLEOBJECT_POS,
+            WAITFORSINGLEOBJECT_KEY,
+            WAITFORSINGLEOBJECT_LEN,
+        ),
     ));
 
     waitForSingleObject(hProcess, dwMilliseconds)
@@ -1260,8 +1409,12 @@ pub unsafe fn WriteFile(
     lpOverlapped: *const OVERLAPPED,
 ) -> u32 {
     let writeFile: FnWriteFile = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(WRITEFILE_POS, WRITEFILE_KEY, WRITEFILE_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(WRITEFILE_POS, WRITEFILE_KEY, WRITEFILE_LEN),
     ));
 
     writeFile(
@@ -1281,8 +1434,16 @@ pub unsafe fn WriteProcessMemory(
     lpNumberOfBytesWritten: usize,
 ) -> u32 {
     let writeProcessMemory: FnWriteProcessMemory = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
-        &XORString::from_offsets(WRITEPROCESSMEMORY_POS, WRITEPROCESSMEMORY_KEY, WRITEPROCESSMEMORY_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            WRITEPROCESSMEMORY_POS,
+            WRITEPROCESSMEMORY_KEY,
+            WRITEPROCESSMEMORY_LEN,
+        ),
     ));
 
     writeProcessMemory(hProcess, lpAddress, lpBuffer, nSize, lpNumberOfBytesWritten)

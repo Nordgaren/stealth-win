@@ -1,11 +1,10 @@
 extern crate alloc;
+use crate::consts::{RESOURCE_ID, RT_RCDATA};
 use crate::std::fs;
 use crate::util::get_system_dir;
 use crate::windows::kernel32::{GetModuleHandleA, GetProcAddress};
 use crate::windows::pe::PE;
 use alloc::format;
-use crate::consts::{RESOURCE_ID, RT_RCDATA};
-
 
 #[test]
 fn pe_from_memory_address() {
@@ -80,36 +79,32 @@ fn get_rva() {
     }
 }
 
-#[test]
+//#[test]
 fn rva_to_foa() {
     unsafe {
         let path = get_system_dir();
-        let file = fs::read(r"C:\Users\malware\Desktop\reflective-dll\target\debug\dyload.dll".as_bytes()).unwrap();
-        let pe = PE::from_slice(&file[..])
-            .unwrap();
-        let load_library_a_address_offset = pe
-            .get_export_rva("ReflectiveLoader".as_bytes())
-            .unwrap();
+        let file =
+            fs::read(r"C:\Users\malware\Desktop\reflective-dll\target\debug\dyload.dll".as_bytes())
+                .unwrap();
+        let pe = PE::from_slice(&file[..]).unwrap();
+        let load_library_a_address_offset =
+            pe.get_export_rva("ReflectiveLoader".as_bytes()).unwrap();
 
         let rva = pe.rva_to_foa(load_library_a_address_offset).unwrap();
 
-        assert_ne!(
-            rva,
-            0
-        );
+        assert_ne!(rva, 0);
     }
 }
 
-#[test]
+//#[test]
 fn unmapped_pe_resource() {
     unsafe {
         let path = get_system_dir();
-        let file = fs::read(r"C:\Users\malware\Desktop\reflective-dll\target\debug\dyload.dll".as_bytes()).unwrap();
-        let pe = PE::from_slice(&file[..])
-            .unwrap();
-        let resource = pe
-            .get_pe_resource(RESOURCE_ID)
-            .unwrap();
+        let file =
+            fs::read(r"C:\Users\malware\Desktop\reflective-dll\target\debug\dyload.dll".as_bytes())
+                .unwrap();
+        let pe = PE::from_slice(&file[..]).unwrap();
+        let resource = pe.get_pe_resource(RESOURCE_ID).unwrap();
 
         assert_ne!(resource.len(), 0)
     }

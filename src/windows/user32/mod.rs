@@ -48,8 +48,12 @@ pub const MB_RTLREADING: u32 = 0x00100000;
 
 pub unsafe fn MessageBoxA(hWnd: usize, lpText: *const u8, lpCaption: *const u8, uType: u32) -> u32 {
     let messageBoxA: FnMessageBoxA = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(USER32_DLL_KEY, USER32_DLL_POS, USER32_DLL_LEN)),
-        &XORString::from_offsets(MESSAGEBOXA_POS, MESSAGEBOXA_KEY, MESSAGEBOXA_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            USER32_DLL_KEY,
+            USER32_DLL_POS,
+            USER32_DLL_LEN,
+        )),
+        &XORString::from_offsets(MESSAGEBOXA_POS, MESSAGEBOXA_KEY, MESSAGEBOXA_LEN),
     ));
 
     messageBoxA(hWnd, lpText, lpCaption, uType)

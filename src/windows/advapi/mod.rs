@@ -89,9 +89,16 @@ pub unsafe fn CryptAcquireContextW(
     dwFlags: u32,
 ) -> bool {
     let cryptAcquireContextW: FnCryptAcquireContextW = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX( &XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTACQUIRECONTEXTW_POS,
+            CRYPTACQUIRECONTEXTW_KEY,
+            CRYPTACQUIRECONTEXTW_LEN,
         ),
-        &XORString::from_offsets(CRYPTACQUIRECONTEXTW_POS, CRYPTACQUIRECONTEXTW_KEY, CRYPTACQUIRECONTEXTW_LEN),
     ));
 
     cryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)
@@ -104,8 +111,16 @@ pub unsafe fn CryptCreateHash(
     phHash: *mut usize,
 ) -> bool {
     let cryptCreateHash: FnCryptCreateHash = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX( &XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTCREATEHASH_POS, CRYPTCREATEHASH_KEY, CRYPTCREATEHASH_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTCREATEHASH_POS,
+            CRYPTCREATEHASH_KEY,
+            CRYPTCREATEHASH_LEN,
+        ),
     ));
 
     cryptCreateHash(phProv, ALG_ID, hKey, dwFlags, phHash)
@@ -119,8 +134,12 @@ pub unsafe fn CryptDecrypt(
     pdwDataLen: *mut u32,
 ) -> bool {
     let cryptDecrypt: FnCryptDecrypt = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTDECRYPT_POS, CRYPTDECRYPT_KEY, CRYPTDECRYPT_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CRYPTDECRYPT_POS, CRYPTDECRYPT_KEY, CRYPTDECRYPT_LEN),
     ));
 
     cryptDecrypt(hKey, hHash, Final, dwFlags, pbData, pdwDataLen)
@@ -133,24 +152,44 @@ pub unsafe fn CryptDeriveKey(
     phKey: *mut usize,
 ) -> bool {
     let cryptDeriveKey: FnCryptDeriveKey = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTDERIVEKEY_POS, CRYPTDERIVEKEY_KEY, CRYPTDERIVEKEY_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CRYPTDERIVEKEY_POS, CRYPTDERIVEKEY_KEY, CRYPTDERIVEKEY_LEN),
     ));
 
     cryptDeriveKey(hHash, Algid, hBaseData, dwFlags, phKey)
 }
 pub unsafe fn CryptDestroyKey(hKey: usize) -> bool {
     let cryptDestroyKey: FnCryptDestroyKey = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTDESTROYKEY_POS, CRYPTDESTROYKEY_KEY, CRYPTDESTROYKEY_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTDESTROYKEY_POS,
+            CRYPTDESTROYKEY_KEY,
+            CRYPTDESTROYKEY_LEN,
+        ),
     ));
 
     cryptDestroyKey(hKey)
 }
 pub unsafe fn CryptDestroyHash(hHash: usize) -> bool {
     let cryptDestroyHash: FnCryptDestroyHash = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTDESTROYHASH_POS, CRYPTDESTROYHASH_KEY, CRYPTDESTROYHASH_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTDESTROYHASH_POS,
+            CRYPTDESTROYHASH_KEY,
+            CRYPTDESTROYHASH_LEN,
+        ),
     ));
 
     cryptDestroyHash(hHash)
@@ -165,8 +204,12 @@ pub unsafe fn CryptEncrypt(
     dwBufLen: u32,
 ) -> bool {
     let cryptEncrypt: FnCryptEncrypt = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTDECRYPT_POS, CRYPTDECRYPT_KEY, CRYPTDECRYPT_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CRYPTDECRYPT_POS, CRYPTDECRYPT_KEY, CRYPTDECRYPT_LEN),
     ));
 
     cryptEncrypt(hKey, hHash, Final, dwFlags, pbData, pdwDataLen, dwBufLen)
@@ -179,32 +222,60 @@ pub unsafe fn CryptGetKeyParam(
     dwFlags: u32,
 ) -> bool {
     let cryptGetKeyParam: FnCryptGetKeyParam = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTGETKEYPARAM_POS, CRYPTGETKEYPARAM_KEY, CRYPTGETKEYPARAM_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTGETKEYPARAM_POS,
+            CRYPTGETKEYPARAM_KEY,
+            CRYPTGETKEYPARAM_LEN,
+        ),
     ));
 
     cryptGetKeyParam(hKey, dwParam, pbData, pbDataLen, dwFlags)
 }
 pub unsafe fn CryptHashData(hHash: usize, pbData: *const u8, dwDataLen: u32, dwFlags: u32) -> bool {
     let cryptHashData: FnCryptHashData = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTHASHDATA_POS, CRYPTHASHDATA_KEY, CRYPTHASHDATA_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(CRYPTHASHDATA_POS, CRYPTHASHDATA_KEY, CRYPTHASHDATA_LEN),
     ));
 
     cryptHashData(hHash, pbData, dwDataLen, dwFlags)
 }
 pub unsafe fn CryptReleaseContext(hProv: usize, dwFlags: u32) -> bool {
     let cryptReleaseContext: FnCryptReleaseContext = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTRELEASECONTEXT_POS, CRYPTRELEASECONTEXT_KEY, CRYPTRELEASECONTEXT_LEN),
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTRELEASECONTEXT_POS,
+            CRYPTRELEASECONTEXT_KEY,
+            CRYPTRELEASECONTEXT_LEN,
+        ),
     ));
 
     cryptReleaseContext(hProv, dwFlags)
 }
 pub unsafe fn CryptSetKeyParam(hKey: usize, dwParam: u32, pbData: *const u8, dwFlags: u32) -> bool {
     let cryptSetKeyParam: FnCryptSetKeyParam = core::mem::transmute(GetProcAddressX(
-        GetModuleHandleX(&XORString::from_offsets(ADVAPI32_DLL_POS, ADVAPI32_DLL_KEY, ADVAPI32_DLL_LEN)),
-        &XORString::from_offsets(CRYPTSETKEYPARAM_POS, CRYPTSETKEYPARAM_KEY, CRYPTSETKEYPARAM_LEN)
+        GetModuleHandleX(&XORString::from_offsets(
+            ADVAPI32_DLL_POS,
+            ADVAPI32_DLL_KEY,
+            ADVAPI32_DLL_LEN,
+        )),
+        &XORString::from_offsets(
+            CRYPTSETKEYPARAM_POS,
+            CRYPTSETKEYPARAM_KEY,
+            CRYPTSETKEYPARAM_LEN,
+        ),
     ));
 
     cryptSetKeyParam(hKey, dwParam, pbData, dwFlags)

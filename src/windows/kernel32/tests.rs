@@ -14,7 +14,7 @@ use core::mem::size_of;
 fn geb_peb() {
     unsafe {
         let peb = get_peb();
-        let peb_addr: usize = mem::transmute(peb);
+        let peb_addr = peb.as_ptr() as usize;
         assert_ne!(peb_addr, 0);
     }
 }
@@ -41,14 +41,14 @@ fn get_proc_address() {
 fn get_function_ordinal(dll_name: &[u8], function_name: &[u8]) -> u16 {
     unsafe {
         let base_addr = GetModuleHandleA(dll_name.as_ptr());
-        let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
-        let nt_headers: &IMAGE_NT_HEADERS =
-            mem::transmute(base_addr + dos_header.e_lfanew as usize);
+        let dos_header= Ptr::<IMAGE_DOS_HEADER>::from_usize(base_addr);
+        let nt_headers =
+            Ptr::<IMAGE_NT_HEADERS>::from_usize(base_addr + dos_header.e_lfanew as usize);
         let export_dir =
             &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
 
-        let image_export_directory: &IMAGE_EXPORT_DIRECTORY =
-            mem::transmute(base_addr + export_dir.VirtualAddress as usize);
+        let image_export_directory =
+            Ptr::<IMAGE_EXPORT_DIRECTORY>::from_usize(base_addr + export_dir.VirtualAddress as usize);
 
         let name_dir = slice::from_raw_parts(
             (base_addr + image_export_directory.AddressOfNames as usize) as *const u32,
@@ -87,7 +87,6 @@ fn get_proc_address_by_ordinal() {
             GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
             "LoadLibraryA".as_bytes(),
         );
-        let load_library: FnLoadLibraryA = mem::transmute(load_library_a_address_ordinal);
 
         assert_eq!(load_library_a_address_ordinal, load_library_a_address);
     }
@@ -100,7 +99,10 @@ fn get_fwd_proc_address() {
             GetModuleHandleInternal("KERNEL32.DLL".as_bytes()),
             "AcquireSRWLockExclusive".as_bytes(),
         );
-        let real_acquire_srw_lock_exclusive = GetProcAddress(GetModuleHandleA("kernel32.dll\0".as_ptr()), "AcquireSRWLockExclusive\0".as_ptr());
+        let real_acquire_srw_lock_exclusive = GetProcAddress(
+            GetModuleHandleA("kernel32.dll\0".as_ptr()),
+            "AcquireSRWLockExclusive\0".as_ptr(),
+        );
 
         assert_eq!(acquire_srw_lock_exclusive, real_acquire_srw_lock_exclusive)
     }
@@ -109,7 +111,11 @@ fn get_fwd_proc_address() {
 #[test]
 fn get_module_handle_x_test() {
     unsafe {
-        let kernel32 = GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN));
+        let kernel32 = GetModuleHandleX(&XORString::from_offsets(
+            KERNEL32_DLL_POS,
+            KERNEL32_DLL_KEY,
+            KERNEL32_DLL_LEN,
+        ));
         let kernel32_normal = GetModuleHandleA("KERNEL32.DLL\0".as_ptr());
         assert_eq!(kernel32, kernel32_normal);
     }
@@ -119,7 +125,11 @@ fn get_module_handle_x_test() {
 fn get_proc_address_x_test() {
     unsafe {
         let load_library_a_handle_x = GetProcAddressX(
-            GetModuleHandleX(&XORString::from_offsets(KERNEL32_DLL_POS, KERNEL32_DLL_KEY, KERNEL32_DLL_LEN)),
+            GetModuleHandleX(&XORString::from_offsets(
+                KERNEL32_DLL_POS,
+                KERNEL32_DLL_KEY,
+                KERNEL32_DLL_LEN,
+            )),
             &XORString::from_offsets(LOADLIBRARYA_POS, LOADLIBRARYA_KEY, LOADLIBRARYA_LEN),
         );
         let load_library_a_handle = GetProcAddress(

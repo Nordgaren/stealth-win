@@ -9,11 +9,12 @@ use crate::windows::ntdll::{
     RESOURCE_DIRECTORY_TABLE,
 };
 
+use crate::svec::SVec;
 use crate::windows::pe::PE;
 use core::arch::global_asm;
 use core::mem::size_of;
 use core::{mem, slice};
-use crate::svec::SVec;
+use crate::ptr::Ptr;
 
 pub fn get_resource_bytes(resource_id: u32, offset: usize, len: usize) -> &'static [u8] {
     let resource = unsafe {
@@ -33,13 +34,13 @@ pub unsafe fn get_dll_base() -> usize {
     loop {
         let magic = module_address as *const u16;
         if *magic == IMAGE_DOS_SIGNATURE {
-            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(magic);
+            let dos_header = Ptr::<IMAGE_DOS_HEADER>::from_usize(module_address);
             // Some x64 dll's can trigger a bogus signature (IMAGE_DOS_SIGNATURE == 'POP r10'),
             // we sanity check the e_lfanew with an upper threshold value of 1024 to avoid problems.
             if dos_header.e_lfanew < 0x400 {
                 // break if we have found a valid MZ/PE header
-                let nt_headers: &IMAGE_NT_HEADERS =
-                    mem::transmute(module_address + dos_header.e_lfanew as usize);
+                let nt_headers =
+                    Ptr::<IMAGE_NT_HEADERS>::from_usize(module_address + dos_header.e_lfanew as usize);
                 if nt_headers.Signature == IMAGE_NT_SIGNATURE {
                     return module_address;
                 }
@@ -283,7 +284,7 @@ pub fn get_system_dir() -> SVec<u8> {
     }
 }
 
-pub fn get_system_dir_w() -> SVec<u16>  {
+pub fn get_system_dir_w() -> SVec<u16> {
     unsafe {
         let mut buffer = SVec::with_capacity(MAX_PATH + 1);
         let len = GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.capacity() as u32);
@@ -304,9 +305,9 @@ mod tests {
         unsafe {
             let return_addr = get_return_address();
             let base_addr = GetModuleHandleA(0 as *const u8);
-            let dos_header: &IMAGE_DOS_HEADER = mem::transmute(base_addr);
-            let nt_header: &IMAGE_NT_HEADERS =
-                mem::transmute(base_addr + dos_header.e_lfanew as usize);
+            let dos_header = Ptr::<IMAGE_DOS_HEADER>::from_usize(base_addr);
+            let nt_header =
+                Ptr::<IMAGE_NT_HEADERS>::from_usize(base_addr + dos_header.e_lfanew as usize);
             let end_addr = base_addr + nt_header.OptionalHeader.SizeOfImage as usize;
 
             assert!((base_addr..end_addr).contains(&return_addr));

@@ -9,11 +9,11 @@ use crate::windows::kernel32::{
 use crate::windows::ntdll::{
     NtReadFile, IO_STATUS_BLOCK, LARGE_INTEGER, STATUS_END_OF_FILE, STATUS_PENDING,
 };
+use core::ffi::c_char;
+use core::ffi::CStr;
 use core::mem::size_of;
 use core::ptr::addr_of_mut;
 use core::{cmp, ptr, slice};
-use core::ffi::CStr;
-use core::ffi::c_char;
 
 pub fn read(path: &[u8]) -> Result<SVec<u8>, u32> {
     unsafe {
@@ -47,12 +47,12 @@ pub fn read(path: &[u8]) -> Result<SVec<u8>, u32> {
 pub fn read_w(path: &[u16]) -> Result<SVec<u8>, u32> {
     unsafe {
         #[cfg(feature = "no_std")]
-            let mut file_path = [0; MAX_PATH + 1];
+        let mut file_path = [0; MAX_PATH + 1];
         #[cfg(feature = "no_std")]
         copy_buffer(path.as_ptr(), file_path.as_mut_ptr(), path.len());
 
         #[cfg(not(feature = "no_std"))]
-            let mut file_path = path.to_svec();
+        let mut file_path = path.to_svec();
         #[cfg(not(feature = "no_std"))]
         file_path.push(0);
 
