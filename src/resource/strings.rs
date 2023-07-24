@@ -4,7 +4,7 @@ use crate::util::get_resource_bytes;
 use core::ffi::CStr;
 use core::ops::{Range, RangeInclusive};
 use widestring::U16CStr;
-
+#[derive(Debug)]
 pub struct XORString {
     pub resource: &'static [u8],
     pub key: &'static [u8],
@@ -70,6 +70,21 @@ impl PartialEq<[u8]> for XORString {
         true
     }
 }
+impl PartialEq<&str> for XORString {
+    fn eq(&self, other: &&str) -> bool {
+        self.eq(other.as_bytes())
+    }
+}
+impl PartialEq<&[u8]> for XORString {
+    fn eq(&self, other: &&[u8]) -> bool {
+        self.eq(other)
+    }
+}
+impl PartialEq<&[u16]> for XORString {
+    fn eq(&self, other: &&[u16]) -> bool {
+        self.eq(other)
+    }
+}
 impl PartialEq<CStr> for XORString {
     fn eq(&self, other: &CStr) -> bool {
         self.eq(other.to_bytes())
@@ -103,5 +118,3 @@ impl PartialEq<[u16]> for XORString {
         true
     }
 }
-
-
